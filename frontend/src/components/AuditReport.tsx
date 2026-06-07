@@ -20,14 +20,24 @@ export const AuditReport: React.FC = () => {
       </div>
       {result.vulnerabilities.map((v: any) => (
         <div key={v.id} style={{ padding: '12px', marginBottom: '8px', borderRadius: '8px',
-          borderLeft: `4px solid ${SEV_COLORS[v.severity] || '#ccc'}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          borderLeft: `4px solid ${SEV_COLORS[v.severity] || '#ccc'}`, background: '#fafafa' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ fontWeight: 600, fontSize: '13px' }}>{v.name}</span>
             <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '10px', color: '#fff',
               background: SEV_COLORS[v.severity] }}>{v.severity}</span>
           </div>
-          <div style={{ fontSize: '12px', color: '#666', margin: '4px 0' }}>Line {v.line}: {v.description}</div>
-          <div style={{ fontSize: '11px', color: '#2e7d32' }}>{v.recommendation}</div>
+          <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px' }}>
+            <span style={{ display: 'inline-block', width: '50px', fontWeight: 500, color: '#888' }}>位置</span>
+            第 {v.line} 行
+          </div>
+          <div style={{ fontSize: '12px', color: '#c62828', marginBottom: '6px', lineHeight: 1.5 }}>
+            <span style={{ display: 'inline-block', width: '50px', fontWeight: 500, color: '#e53935' }}>命中原因</span>
+            {v.description}
+          </div>
+          <div style={{ fontSize: '12px', color: '#2e7d32', lineHeight: 1.5 }}>
+            <span style={{ display: 'inline-block', width: '50px', fontWeight: 500, color: '#388e3c' }}>修复建议</span>
+            {v.recommendation}
+          </div>
         </div>
       ))}
     </div>

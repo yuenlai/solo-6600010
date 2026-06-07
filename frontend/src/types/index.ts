@@ -22,3 +22,11 @@ export interface BatchAuditResult {
 export interface ContractInput {
   id: string; name: string; source_code: string;
 }
+export interface CustomRule {
+  id: string; name: string; severity: "critical"|"high"|"medium"|"low"|"info";
+  pattern: string; description: string; recommendation: string; enabled: boolean;
+}
+export interface CustomRuleCreate {
+  name: string; severity: "critical"|"high"|"medium"|"low"|"info";
+  pattern: string; description: string; recommendation: string; enabled?: boolean;
+}

@@ -27,14 +27,24 @@ export const BatchAuditReport: React.FC = () => {
         </div>
         {selectedContract.vulnerabilities.map((v: any) => (
           <div key={v.id} style={{ padding: '12px', marginBottom: '8px', borderRadius: '8px',
-            borderLeft: `4px solid ${SEV_COLORS[v.severity] || '#ccc'}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            borderLeft: `4px solid ${SEV_COLORS[v.severity] || '#ccc'}`, background: '#fafafa' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
               <span style={{ fontWeight: 600, fontSize: '13px' }}>{v.name}</span>
               <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '10px', color: '#fff',
                 background: SEV_COLORS[v.severity] }}>{v.severity}</span>
             </div>
-            <div style={{ fontSize: '12px', color: '#666', margin: '4px 0' }}>第 {v.line} 行: {v.description}</div>
-            <div style={{ fontSize: '11px', color: '#2e7d32' }}>{v.recommendation}</div>
+            <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px' }}>
+              <span style={{ display: 'inline-block', width: '60px', fontWeight: 500, color: '#888' }}>位置</span>
+              第 {v.line} 行
+            </div>
+            <div style={{ fontSize: '12px', color: '#c62828', marginBottom: '6px', lineHeight: 1.5 }}>
+              <span style={{ display: 'inline-block', width: '60px', fontWeight: 500, color: '#e53935' }}>命中原因</span>
+              {v.description}
+            </div>
+            <div style={{ fontSize: '12px', color: '#2e7d32', lineHeight: 1.5 }}>
+              <span style={{ display: 'inline-block', width: '60px', fontWeight: 500, color: '#388e3c' }}>修复建议</span>
+              {v.recommendation}
+            </div>
           </div>
         ))}
       </div>
@@ -80,17 +90,24 @@ export const BatchAuditReport: React.FC = () => {
           {batchResult.common_issues.length === 0 && <div style={{ color: '#999', fontSize: '13px' }}>未发现共性问题</div>}
           {batchResult.common_issues.map((issue: CommonIssue) => (
             <div key={issue.name} style={{ padding: '12px', marginBottom: '8px', borderRadius: '8px',
-              borderLeft: `4px solid ${SEV_COLORS[issue.severity] || '#ccc'}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              borderLeft: `4px solid ${SEV_COLORS[issue.severity] || '#ccc'}`, background: '#fafafa' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontWeight: 600, fontSize: '13px' }}>{issue.name}</span>
                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                   <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '10px', color: '#fff', background: SEV_COLORS[issue.severity] }}>{issue.severity}</span>
                   <span style={{ fontSize: '11px', color: '#666', background: '#f0f0f0', padding: '2px 6px', borderRadius: '4px' }}>{issue.count} 次出现</span>
                 </div>
               </div>
-              <div style={{ fontSize: '12px', color: '#666', margin: '4px 0' }}>{issue.description}</div>
-              <div style={{ fontSize: '11px', color: '#2e7d32' }}>{issue.recommendation}</div>
-              <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              <div style={{ fontSize: '12px', color: '#c62828', marginBottom: '6px', lineHeight: 1.5 }}>
+                <span style={{ display: 'inline-block', width: '60px', fontWeight: 500, color: '#e53935' }}>问题描述</span>
+                {issue.description}
+              </div>
+              <div style={{ fontSize: '12px', color: '#2e7d32', marginBottom: '8px', lineHeight: 1.5 }}>
+                <span style={{ display: 'inline-block', width: '60px', fontWeight: 500, color: '#388e3c' }}>修复建议</span>
+                {issue.recommendation}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                <span style={{ fontSize: '11px', color: '#888', marginRight: '4px' }}>影响合约：</span>
                 {issue.affected_contracts.map(c => (
                   <span key={c} style={{ fontSize: '10px', padding: '2px 6px', background: '#e3f2fd', color: '#1565c0', borderRadius: '4px' }}>{c}</span>
                 ))}

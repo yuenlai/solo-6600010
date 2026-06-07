@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AuditResult, BatchAuditResult, ContractInput } from '../types';
+import { AuditResult, BatchAuditResult, ContractInput, CustomRule, CustomRuleCreate } from '../types';
 
 interface AuditState {
   mode: 'single' | 'batch';
@@ -8,6 +8,8 @@ interface AuditState {
   batchContracts: ContractInput[];
   batchResult: BatchAuditResult | null;
   isAnalyzing: boolean;
+  customRules: CustomRule[];
+  showRuleManager: boolean;
   setMode: (m: 'single' | 'batch') => void;
   setSourceCode: (code: string) => void;
   setResult: (r: AuditResult | null) => void;
@@ -16,6 +18,11 @@ interface AuditState {
   updateBatchContract: (id: string, field: keyof ContractInput, value: string) => void;
   setBatchResult: (r: BatchAuditResult | null) => void;
   setAnalyzing: (v: boolean) => void;
+  setCustomRules: (rules: CustomRule[]) => void;
+  addCustomRule: (rule: CustomRule) => void;
+  updateCustomRule: (rule: CustomRule) => void;
+  deleteCustomRule: (id: string) => void;
+  setShowRuleManager: (show: boolean) => void;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -68,6 +75,8 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   ],
   batchResult: null,
   isAnalyzing: false,
+  customRules: [],
+  showRuleManager: false,
   setMode: (m) => set({ mode: m, result: null, batchResult: null }),
   setSourceCode: (code) => set({ sourceCode: code }),
   setResult: (r) => set({ result: r }),
@@ -76,4 +85,9 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   updateBatchContract: (id, field, value) => set({ batchContracts: get().batchContracts.map(c => c.id === id ? { ...c, [field]: value } : c) }),
   setBatchResult: (r) => set({ batchResult: r }),
   setAnalyzing: (v) => set({ isAnalyzing: v }),
+  setCustomRules: (rules) => set({ customRules: rules }),
+  addCustomRule: (rule) => set({ customRules: [...get().customRules, rule] }),
+  updateCustomRule: (rule) => set({ customRules: get().customRules.map(r => r.id === rule.id ? rule : r) }),
+  deleteCustomRule: (id) => set({ customRules: get().customRules.filter(r => r.id !== id) }),
+  setShowRuleManager: (show) => set({ showRuleManager: show }),
 }));

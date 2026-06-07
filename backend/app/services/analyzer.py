@@ -2,6 +2,7 @@ import re, uuid
 from datetime import datetime
 from collections import defaultdict
 from ..models.contract import Vulnerability, Severity, AuditResult, CommonIssue, BatchAuditResult, AuditRequest
+from ..core.database import custom_rules
 
 PATTERNS = [
     {"name": "Reentrancy", "severity": Severity.critical, "pattern": r"\.call\{value:",
@@ -18,15 +19,32 @@ PATTERNS = [
      "description": "Inline assembly - harder to audit", "recommendation": "Minimize usage"},
 ]
 
+def get_all_patterns():
+    patterns = list(PATTERNS)
+    for rule in custom_rules.values():
+        if rule.enabled:
+            patterns.append({
+                "name": rule.name,
+                "severity": rule.severity,
+                "pattern": rule.pattern,
+                "description": rule.description,
+                "recommendation": rule.recommendation,
+            })
+    return patterns
+
 def analyze_contract(source_code: str, contract_name: str) -> AuditResult:
     vulns = []
     lines = source_code.split("\n")
-    for pi in PATTERNS:
+    all_patterns = get_all_patterns()
+    for pi in all_patterns:
         for i, line in enumerate(lines, 1):
-            if re.search(pi["pattern"], line, re.IGNORECASE):
-                vulns.append(Vulnerability(id=str(uuid.uuid4())[:8], name=pi["name"],
-                    severity=pi["severity"], line=i, description=pi["description"],
-                    recommendation=pi["recommendation"], pattern=pi["pattern"]))
+            try:
+                if re.search(pi["pattern"], line, re.IGNORECASE):
+                    vulns.append(Vulnerability(id=str(uuid.uuid4())[:8], name=pi["name"],
+                        severity=pi["severity"], line=i, description=pi["description"],
+                        recommendation=pi["recommendation"], pattern=pi["pattern"]))
+            except re.error:
+                continue
     penalty = {"critical": 25, "high": 15, "medium": 8, "low": 3, "info": 1}
     score = max(0, 100 - sum(penalty.get(v.severity.value, 0) for v in vulns))
     return AuditResult(id=str(uuid.uuid4()), contract_name=contract_name,

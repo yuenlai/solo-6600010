@@ -31,3 +31,11 @@ class BatchAuditResult(BaseModel):
     total_vulnerabilities: int
     average_score: float
     audited_at: str
+
+class CustomRule(BaseModel):
+    id: str; name: str; severity: Severity; pattern: str
+    description: str; recommendation: str; enabled: bool = True
+
+class CustomRuleCreate(BaseModel):
+    name: str; severity: Severity; pattern: str
+    description: str; recommendation: str; enabled: bool = True
