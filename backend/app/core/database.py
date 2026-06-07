@@ -5,6 +5,7 @@ custom_rules = {}
 audit_history = {}
 contract_version_counter = {}
 false_positive_feedbacks = {}
+audit_task_lists = {}
 
 __all__ = [
     'audit_results',
@@ -13,5 +14,6 @@ __all__ = [
     'custom_rules',
     'audit_history',
     'contract_version_counter',
-    'false_positive_feedbacks'
+    'false_positive_feedbacks',
+    'audit_task_lists'
 ]

@@ -6,10 +6,11 @@ import { BatchAuditReport } from './components/BatchAuditReport';
 import { CustomRuleManager } from './components/CustomRuleManager';
 import { AuditHistory } from './components/AuditHistory';
 import { ContractTemplateLibrary } from './components/ContractTemplateLibrary';
+import { AuditTaskList } from './components/AuditTaskList';
 import { useAuditStore } from './store/audit';
 
 const App: React.FC = () => {
-  const { mode, setMode, setShowRuleManager, customRules, setShowHistory, setShowTemplateLibrary } = useAuditStore();
+  const { mode, setMode, setShowRuleManager, customRules, setShowHistory, setShowTemplateLibrary, setShowTaskList, auditTaskLists } = useAuditStore();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', background: '#2d2d2d', borderBottom: '1px solid #444', gap: '16px' }}>
@@ -31,6 +32,12 @@ const App: React.FC = () => {
           }}>
             审计历史
           </button>
+          <button onClick={() => setShowTaskList(true)} style={{
+            padding: '6px 16px', border: '1px solid #666', borderRadius: '4px',
+            cursor: 'pointer', fontWeight: 500, background: 'transparent', color: '#ccc'
+          }}>
+            📋 任务清单 {auditTaskLists.length > 0 && `(${auditTaskLists.length})`}
+          </button>
           <button onClick={() => setShowRuleManager(true)} style={{
             padding: '6px 16px', border: '1px solid #666', borderRadius: '4px',
             cursor: 'pointer', fontWeight: 500, background: 'transparent', color: '#ccc'
@@ -45,6 +52,7 @@ const App: React.FC = () => {
       <CustomRuleManager />
       <AuditHistory />
       <ContractTemplateLibrary />
+      <AuditTaskList />
     </div>
   );
 };

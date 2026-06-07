@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import { 
   AuditResult, BatchAuditResult, ContractInput, CustomRule, CustomRuleCreate,
   ContractHistorySummary, AuditHistoryRecord, ContractCompareResult,
-  ContractTemplate, FalsePositiveFeedback, FalsePositiveFeedbackCreate
+  ContractTemplate, FalsePositiveFeedback, FalsePositiveFeedbackCreate,
+  AuditTaskList, AuditTaskListCreate, AuditTaskItem, AuditTaskItemCreate,
+  AuditTaskItemUpdate
 } from '../types';
 
 interface AuditState {
@@ -49,6 +51,19 @@ interface AuditState {
   submitFalsePositiveFeedback: (data: FalsePositiveFeedbackCreate) => Promise<FalsePositiveFeedback>;
   fetchFalsePositiveFeedbacks: (auditId?: string) => Promise<void>;
   reviewFalsePositiveFeedback: (feedbackId: string, status: string, feedbackNote?: string) => Promise<FalsePositiveFeedback>;
+  showTaskList: boolean;
+  setShowTaskList: (show: boolean) => void;
+  auditTaskLists: AuditTaskList[];
+  selectedTaskList: AuditTaskList | null;
+  setAuditTaskLists: (lists: AuditTaskList[]) => void;
+  setSelectedTaskList: (list: AuditTaskList | null) => void;
+  fetchTaskLists: () => Promise<void>;
+  createTaskList: (data: AuditTaskListCreate) => Promise<AuditTaskList>;
+  updateTaskList: (listId: string, data: AuditTaskListCreate) => Promise<AuditTaskList>;
+  deleteTaskList: (listId: string) => Promise<void>;
+  addTaskItem: (listId: string, data: AuditTaskItemCreate) => Promise<AuditTaskItem>;
+  updateTaskItem: (listId: string, taskId: string, data: AuditTaskItemUpdate) => Promise<AuditTaskItem>;
+  deleteTaskItem: (listId: string, taskId: string) => Promise<void>;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -112,6 +127,9 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   contractTemplates: [],
   selectedTemplate: null,
   falsePositiveFeedbacks: [],
+  showTaskList: false,
+  auditTaskLists: [],
+  selectedTaskList: null,
   setMode: (m) => set({ mode: m, result: null, batchResult: null }),
   setSourceCode: (code) => set({ sourceCode: code }),
   setResult: (r) => set({ result: r }),
@@ -162,5 +180,90 @@ export const useAuditStore = create<AuditState>((set, get) => ({
       get().falsePositiveFeedbacks.map(f => f.id === feedbackId ? feedback : f)
     );
     return feedback;
+  },
+  setShowTaskList: (show) => set({ showTaskList: show }),
+  setAuditTaskLists: (lists) => set({ auditTaskLists: lists }),
+  setSelectedTaskList: (list) => set({ selectedTaskList: list }),
+  fetchTaskLists: async () => {
+    const res = await fetch('/api/audit/task-lists');
+    const lists = await res.json();
+    get().setAuditTaskLists(lists);
+  },
+  createTaskList: async (data) => {
+    const res = await fetch('/api/audit/task-lists', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const list = await res.json();
+    get().setAuditTaskLists([list, ...get().auditTaskLists]);
+    return list;
+  },
+  updateTaskList: async (listId, data) => {
+    const res = await fetch(`/api/audit/task-lists/${listId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const list = await res.json();
+    get().setAuditTaskLists(get().auditTaskLists.map(l => l.id === listId ? list : l));
+    if (get().selectedTaskList?.id === listId) {
+      get().setSelectedTaskList(list);
+    }
+    return list;
+  },
+  deleteTaskList: async (listId) => {
+    await fetch(`/api/audit/task-lists/${listId}`, { method: 'DELETE' });
+    get().setAuditTaskLists(get().auditTaskLists.filter(l => l.id !== listId));
+    if (get().selectedTaskList?.id === listId) {
+      get().setSelectedTaskList(null);
+    }
+  },
+  addTaskItem: async (listId, data) => {
+    const res = await fetch(`/api/audit/task-lists/${listId}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const task = await res.json();
+    const list = get().auditTaskLists.find(l => l.id === listId);
+    if (list) {
+      const updatedList = { ...list, tasks: [...list.tasks, task], updated_at: new Date().toISOString() };
+      get().setAuditTaskLists(get().auditTaskLists.map(l => l.id === listId ? updatedList : l));
+      if (get().selectedTaskList?.id === listId) {
+        get().setSelectedTaskList(updatedList);
+      }
+    }
+    return task;
+  },
+  updateTaskItem: async (listId, taskId, data) => {
+    const res = await fetch(`/api/audit/task-lists/${listId}/tasks/${taskId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const task = await res.json();
+    const list = get().auditTaskLists.find(l => l.id === listId);
+    if (list) {
+      const updatedTasks = list.tasks.map(t => t.id === taskId ? task : t);
+      const updatedList = { ...list, tasks: updatedTasks, updated_at: new Date().toISOString() };
+      get().setAuditTaskLists(get().auditTaskLists.map(l => l.id === listId ? updatedList : l));
+      if (get().selectedTaskList?.id === listId) {
+        get().setSelectedTaskList(updatedList);
+      }
+    }
+    return task;
+  },
+  deleteTaskItem: async (listId, taskId) => {
+    await fetch(`/api/audit/task-lists/${listId}/tasks/${taskId}`, { method: 'DELETE' });
+    const list = get().auditTaskLists.find(l => l.id === listId);
+    if (list) {
+      const updatedTasks = list.tasks.filter(t => t.id !== taskId);
+      const updatedList = { ...list, tasks: updatedTasks, updated_at: new Date().toISOString() };
+      get().setAuditTaskLists(get().auditTaskLists.map(l => l.id === listId ? updatedList : l));
+      if (get().selectedTaskList?.id === listId) {
+        get().setSelectedTaskList(updatedList);
+      }
+    }
   },
 }));

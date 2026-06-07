@@ -93,3 +93,52 @@ export interface FalsePositiveFeedbackCreate {
   contract_name: string;
   reason: string;
 }
+
+export type AuditTaskStatus = "pending" | "in_progress" | "completed" | "skipped";
+export type AuditTaskPriority = "low" | "medium" | "high" | "critical";
+
+export interface AuditTaskItem {
+  id: string;
+  title: string;
+  description?: string;
+  status: AuditTaskStatus;
+  priority: AuditTaskPriority;
+  assignee?: string;
+  due_date?: string;
+  completed_at?: string;
+  notes?: string;
+}
+
+export interface AuditTaskList {
+  id: string;
+  contract_name: string;
+  contract_address?: string;
+  description?: string;
+  tasks: AuditTaskItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuditTaskListCreate {
+  contract_name: string;
+  contract_address?: string;
+  description?: string;
+}
+
+export interface AuditTaskItemCreate {
+  title: string;
+  description?: string;
+  priority?: AuditTaskPriority;
+  assignee?: string;
+  due_date?: string;
+}
+
+export interface AuditTaskItemUpdate {
+  title?: string;
+  description?: string;
+  status?: AuditTaskStatus;
+  priority?: AuditTaskPriority;
+  assignee?: string;
+  due_date?: string;
+  notes?: string;
+}

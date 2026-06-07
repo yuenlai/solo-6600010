@@ -83,6 +83,59 @@ if _HAS_PYDANTIC:
         vulnerability_name: str
         contract_name: str
         reason: str
+
+    class AuditTaskStatus(str, Enum):
+        pending = "pending"
+        in_progress = "in_progress"
+        completed = "completed"
+        skipped = "skipped"
+
+    class AuditTaskPriority(str, Enum):
+        low = "low"
+        medium = "medium"
+        high = "high"
+        critical = "critical"
+
+    class AuditTaskItem(BaseModel):
+        id: str
+        title: str
+        description: str | None = None
+        status: AuditTaskStatus
+        priority: AuditTaskPriority
+        assignee: str | None = None
+        due_date: str | None = None
+        completed_at: str | None = None
+        notes: str | None = None
+
+    class AuditTaskList(BaseModel):
+        id: str
+        contract_name: str
+        contract_address: str | None = None
+        description: str | None = None
+        tasks: list[AuditTaskItem]
+        created_at: str
+        updated_at: str
+
+    class AuditTaskListCreate(BaseModel):
+        contract_name: str
+        contract_address: str | None = None
+        description: str | None = None
+
+    class AuditTaskItemCreate(BaseModel):
+        title: str
+        description: str | None = None
+        priority: AuditTaskPriority = AuditTaskPriority.medium
+        assignee: str | None = None
+        due_date: str | None = None
+
+    class AuditTaskItemUpdate(BaseModel):
+        title: str | None = None
+        description: str | None = None
+        status: AuditTaskStatus | None = None
+        priority: AuditTaskPriority | None = None
+        assignee: str | None = None
+        due_date: str | None = None
+        notes: str | None = None
 else:
     class Vulnerability:
         pass
@@ -111,4 +164,24 @@ else:
     class FalsePositiveFeedback:
         pass
     class FalsePositiveFeedbackCreate:
+        pass
+    class AuditTaskStatus(str, Enum):
+        pending = "pending"
+        in_progress = "in_progress"
+        completed = "completed"
+        skipped = "skipped"
+    class AuditTaskPriority(str, Enum):
+        low = "low"
+        medium = "medium"
+        high = "high"
+        critical = "critical"
+    class AuditTaskItem:
+        pass
+    class AuditTaskList:
+        pass
+    class AuditTaskListCreate:
+        pass
+    class AuditItemCreate:
+        pass
+    class AuditTaskItemUpdate:
         pass

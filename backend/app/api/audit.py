@@ -12,14 +12,16 @@ from datetime import datetime
 from ..models.contract import (
     AuditRequest, AuditResult, BatchAuditRequest, BatchAuditResult, 
     CustomRule, CustomRuleCreate, AuditHistoryRecord, ContractHistorySummary,
-    FalsePositiveFeedback, FalsePositiveFeedbackCreate, FalsePositiveFeedbackStatus
+    FalsePositiveFeedback, FalsePositiveFeedbackCreate, FalsePositiveFeedbackStatus,
+    AuditTaskList, AuditTaskListCreate, AuditTaskItem, AuditTaskItemCreate,
+    AuditTaskItemUpdate, AuditTaskStatus
 )
 try:
     from ..services.analyzer import analyze_contract, analyze_batch
 except ImportError:
     analyze_contract = None
     analyze_batch = None
-from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks
+from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists
 
 class DummyRouter:
     def post(self, path):
@@ -715,3 +717,109 @@ async def review_false_positive_feedback(
     feedback.reviewed_at = datetime.now().isoformat()
     false_positive_feedbacks[feedback_id] = feedback
     return feedback
+
+@router.get("/task-lists")
+async def list_task_lists() -> list[AuditTaskList]:
+    return sorted(audit_task_lists.values(), key=lambda x: x.updated_at, reverse=True)
+
+@router.get("/task-lists/{list_id}")
+async def get_task_list(list_id: str) -> AuditTaskList:
+    if list_id not in audit_task_lists:
+        raise HTTPException(404, "Task list not found")
+    return audit_task_lists[list_id]
+
+@router.post("/task-lists")
+async def create_task_list(req: AuditTaskListCreate) -> AuditTaskList:
+    list_id = str(uuid.uuid4())[:8]
+    now = datetime.now().isoformat()
+    task_list = AuditTaskList(
+        id=list_id,
+        contract_name=req.contract_name,
+        contract_address=req.contract_address,
+        description=req.description,
+        tasks=[],
+        created_at=now,
+        updated_at=now
+    )
+    audit_task_lists[list_id] = task_list
+    return task_list
+
+@router.put("/task-lists/{list_id}")
+async def update_task_list(list_id: str, req: AuditTaskListCreate) -> AuditTaskList:
+    if list_id not in audit_task_lists:
+        raise HTTPException(404, "Task list not found")
+    task_list = audit_task_lists[list_id]
+    task_list.contract_name = req.contract_name
+    task_list.contract_address = req.contract_address
+    task_list.description = req.description
+    task_list.updated_at = datetime.now().isoformat()
+    audit_task_lists[list_id] = task_list
+    return task_list
+
+@router.delete("/task-lists/{list_id}")
+async def delete_task_list(list_id: str):
+    if list_id not in audit_task_lists:
+        raise HTTPException(404, "Task list not found")
+    del audit_task_lists[list_id]
+    return {"message": "Task list deleted"}
+
+@router.post("/task-lists/{list_id}/tasks")
+async def add_task_item(list_id: str, req: AuditTaskItemCreate) -> AuditTaskItem:
+    if list_id not in audit_task_lists:
+        raise HTTPException(404, "Task list not found")
+    task_id = str(uuid.uuid4())[:8]
+    task_item = AuditTaskItem(
+        id=task_id,
+        title=req.title,
+        description=req.description,
+        status=AuditTaskStatus.pending,
+        priority=req.priority,
+        assignee=req.assignee,
+        due_date=req.due_date
+    )
+    task_list = audit_task_lists[list_id]
+    task_list.tasks.append(task_item)
+    task_list.updated_at = datetime.now().isoformat()
+    audit_task_lists[list_id] = task_list
+    return task_item
+
+@router.put("/task-lists/{list_id}/tasks/{task_id}")
+async def update_task_item(list_id: str, task_id: str, req: AuditTaskItemUpdate) -> AuditTaskItem:
+    if list_id not in audit_task_lists:
+        raise HTTPException(404, "Task list not found")
+    task_list = audit_task_lists[list_id]
+    task_index = next((i for i, t in enumerate(task_list.tasks) if t.id == task_id), -1)
+    if task_index == -1:
+        raise HTTPException(404, "Task item not found")
+    task = task_list.tasks[task_index]
+    if req.title is not None:
+        task.title = req.title
+    if req.description is not None:
+        task.description = req.description
+    if req.status is not None:
+        task.status = req.status
+        if req.status == AuditTaskStatus.completed:
+            task.completed_at = datetime.now().isoformat()
+        else:
+            task.completed_at = None
+    if req.priority is not None:
+        task.priority = req.priority
+    if req.assignee is not None:
+        task.assignee = req.assignee
+    if req.due_date is not None:
+        task.due_date = req.due_date
+    if req.notes is not None:
+        task.notes = req.notes
+    task_list.updated_at = datetime.now().isoformat()
+    audit_task_lists[list_id] = task_list
+    return task
+
+@router.delete("/task-lists/{list_id}/tasks/{task_id}")
+async def delete_task_item(list_id: str, task_id: str):
+    if list_id not in audit_task_lists:
+        raise HTTPException(404, "Task list not found")
+    task_list = audit_task_lists[list_id]
+    task_list.tasks = [t for t in task_list.tasks if t.id != task_id]
+    task_list.updated_at = datetime.now().isoformat()
+    audit_task_lists[list_id] = task_list
+    return {"message": "Task item deleted"}
