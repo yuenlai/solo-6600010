@@ -39,3 +39,16 @@ class CustomRule(BaseModel):
 class CustomRuleCreate(BaseModel):
     name: str; severity: Severity; pattern: str
     description: str; recommendation: str; enabled: bool = True
+
+class AuditHistoryRecord(BaseModel):
+    id: str; contract_name: str; score: float
+    vulnerabilities: list; audited_at: str; version: int
+    source_code_hash: str
+
+class ContractHistorySummary(BaseModel):
+    contract_name: str
+    audit_count: int
+    latest_score: float
+    first_audit_at: str
+    latest_audit_at: str
+    score_trend: str

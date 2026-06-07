@@ -30,3 +30,29 @@ export interface CustomRuleCreate {
   name: string; severity: "critical"|"high"|"medium"|"low"|"info";
   pattern: string; description: string; recommendation: string; enabled?: boolean;
 }
+
+export interface AuditHistoryRecord {
+  id: string; contract_name: string; score: number;
+  vulnerabilities: Vulnerability[]; audited_at: string; version: number;
+  source_code_hash: string;
+}
+
+export interface ContractHistorySummary {
+  contract_name: string; audit_count: number; latest_score: number;
+  first_audit_at: string; latest_audit_at: string; score_trend: "improving" | "declining" | "stable";
+}
+
+export interface ScoreDataPoint {
+  version: number; score: number; audited_at: string;
+}
+
+export interface ContractCompareResult {
+  contract_name: string;
+  first_audit: AuditHistoryRecord;
+  latest_audit: AuditHistoryRecord;
+  score_change: number;
+  score_change_percent: number;
+  vuln_count_change: number;
+  audit_count: number;
+  all_scores: ScoreDataPoint[];
+}

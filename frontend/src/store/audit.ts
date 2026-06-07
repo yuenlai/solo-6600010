@@ -1,5 +1,8 @@
 import { create } from 'zustand';
-import { AuditResult, BatchAuditResult, ContractInput, CustomRule, CustomRuleCreate } from '../types';
+import { 
+  AuditResult, BatchAuditResult, ContractInput, CustomRule, CustomRuleCreate,
+  ContractHistorySummary, AuditHistoryRecord, ContractCompareResult
+} from '../types';
 
 interface AuditState {
   mode: 'single' | 'batch';
@@ -10,6 +13,11 @@ interface AuditState {
   isAnalyzing: boolean;
   customRules: CustomRule[];
   showRuleManager: boolean;
+  showHistory: boolean;
+  historySummaries: ContractHistorySummary[];
+  selectedContractHistory: AuditHistoryRecord[];
+  selectedCompareResult: ContractCompareResult | null;
+  selectedContractName: string | null;
   setMode: (m: 'single' | 'batch') => void;
   setSourceCode: (code: string) => void;
   setResult: (r: AuditResult | null) => void;
@@ -23,6 +31,11 @@ interface AuditState {
   updateCustomRule: (rule: CustomRule) => void;
   deleteCustomRule: (id: string) => void;
   setShowRuleManager: (show: boolean) => void;
+  setShowHistory: (show: boolean) => void;
+  setHistorySummaries: (summaries: ContractHistorySummary[]) => void;
+  setSelectedContractHistory: (history: AuditHistoryRecord[]) => void;
+  setSelectedCompareResult: (result: ContractCompareResult | null) => void;
+  setSelectedContractName: (name: string | null) => void;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -77,6 +90,11 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   isAnalyzing: false,
   customRules: [],
   showRuleManager: false,
+  showHistory: false,
+  historySummaries: [],
+  selectedContractHistory: [],
+  selectedCompareResult: null,
+  selectedContractName: null,
   setMode: (m) => set({ mode: m, result: null, batchResult: null }),
   setSourceCode: (code) => set({ sourceCode: code }),
   setResult: (r) => set({ result: r }),
@@ -90,4 +108,9 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   updateCustomRule: (rule) => set({ customRules: get().customRules.map(r => r.id === rule.id ? rule : r) }),
   deleteCustomRule: (id) => set({ customRules: get().customRules.filter(r => r.id !== id) }),
   setShowRuleManager: (show) => set({ showRuleManager: show }),
+  setShowHistory: (show) => set({ showHistory: show }),
+  setHistorySummaries: (summaries) => set({ historySummaries: summaries }),
+  setSelectedContractHistory: (history) => set({ selectedContractHistory: history }),
+  setSelectedCompareResult: (result) => set({ selectedCompareResult: result }),
+  setSelectedContractName: (name) => set({ selectedContractName: name }),
 }));
