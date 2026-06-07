@@ -181,7 +181,7 @@ else:
         pass
     class AuditTaskListCreate:
         pass
-    class AuditItemCreate:
+    class AuditTaskItemCreate:
         pass
     class AuditTaskItemUpdate:
         pass
