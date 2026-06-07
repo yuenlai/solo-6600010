@@ -142,3 +142,52 @@ export interface AuditTaskItemUpdate {
   due_date?: string;
   notes?: string;
 }
+
+export interface RiskDistribution {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  info: number;
+}
+
+export interface ProjectContractSummary {
+  id: string;
+  contract_name: string;
+  score: number;
+  total_vulnerabilities: number;
+  risk_distribution: RiskDistribution;
+  last_audited_at: string;
+  status: "safe" | "warning" | "danger";
+}
+
+export interface CriticalIssue {
+  id: string;
+  name: string;
+  severity: "critical" | "high";
+  contract_name: string;
+  description: string;
+  line: number;
+  first_found_at: string;
+  status: "open" | "fixed" | "ignored";
+}
+
+export interface RecentActivity {
+  id: string;
+  type: "audit" | "fix" | "task" | "feedback";
+  contract_name: string;
+  description: string;
+  created_at: string;
+  metadata?: Record<string, any>;
+}
+
+export interface ProjectDashboardData {
+  total_contracts: number;
+  total_vulnerabilities: number;
+  average_score: number;
+  risk_distribution: RiskDistribution;
+  contracts: ProjectContractSummary[];
+  critical_issues: CriticalIssue[];
+  recent_activities: RecentActivity[];
+  last_updated: string;
+}

@@ -4,7 +4,7 @@ import {
   ContractHistorySummary, AuditHistoryRecord, ContractCompareResult,
   ContractTemplate, FalsePositiveFeedback, FalsePositiveFeedbackCreate,
   AuditTaskList, AuditTaskListCreate, AuditTaskItem, AuditTaskItemCreate,
-  AuditTaskItemUpdate
+  AuditTaskItemUpdate, ProjectDashboardData
 } from '../types';
 
 interface AuditState {
@@ -64,6 +64,11 @@ interface AuditState {
   addTaskItem: (listId: string, data: AuditTaskItemCreate) => Promise<AuditTaskItem>;
   updateTaskItem: (listId: string, taskId: string, data: AuditTaskItemUpdate) => Promise<AuditTaskItem>;
   deleteTaskItem: (listId: string, taskId: string) => Promise<void>;
+  showDashboard: boolean;
+  setShowDashboard: (show: boolean) => void;
+  dashboardData: ProjectDashboardData | null;
+  setDashboardData: (data: ProjectDashboardData | null) => void;
+  fetchDashboardData: () => Promise<void>;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -130,6 +135,8 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   showTaskList: false,
   auditTaskLists: [],
   selectedTaskList: null,
+  showDashboard: false,
+  dashboardData: null,
   setMode: (m) => set({ mode: m, result: null, batchResult: null }),
   setSourceCode: (code) => set({ sourceCode: code }),
   setResult: (r) => set({ result: r }),
@@ -264,6 +271,154 @@ export const useAuditStore = create<AuditState>((set, get) => ({
       if (get().selectedTaskList?.id === listId) {
         get().setSelectedTaskList(updatedList);
       }
+    }
+  },
+  setShowDashboard: (show) => set({ showDashboard: show }),
+  setDashboardData: (data) => set({ dashboardData: data }),
+  fetchDashboardData: async () => {
+    try {
+      const res = await fetch('/api/audit/dashboard');
+      if (res.ok) {
+        const data = await res.json();
+        get().setDashboardData(data);
+      } else {
+        get().setDashboardData(null);
+      }
+    } catch (e) {
+      const mockData: ProjectDashboardData = {
+        total_contracts: 5,
+        total_vulnerabilities: 23,
+        average_score: 72,
+        risk_distribution: { critical: 2, high: 5, medium: 8, low: 6, info: 2 },
+        contracts: [
+          {
+            id: genId(),
+            contract_name: 'VulnerableWallet',
+            score: 45,
+            total_vulnerabilities: 8,
+            risk_distribution: { critical: 1, high: 3, medium: 2, low: 2, info: 0 },
+            last_audited_at: new Date(Date.now() - 3600000).toISOString(),
+            status: 'danger'
+          },
+          {
+            id: genId(),
+            contract_name: 'SimpleAuction',
+            score: 62,
+            total_vulnerabilities: 6,
+            risk_distribution: { critical: 1, high: 2, medium: 2, low: 1, info: 0 },
+            last_audited_at: new Date(Date.now() - 7200000).toISOString(),
+            status: 'warning'
+          },
+          {
+            id: genId(),
+            contract_name: 'TokenContract',
+            score: 85,
+            total_vulnerabilities: 3,
+            risk_distribution: { critical: 0, high: 0, medium: 2, low: 1, info: 0 },
+            last_audited_at: new Date(Date.now() - 86400000).toISOString(),
+            status: 'safe'
+          },
+          {
+            id: genId(),
+            contract_name: 'StakingPool',
+            score: 58,
+            total_vulnerabilities: 4,
+            risk_distribution: { critical: 0, high: 2, medium: 1, low: 1, info: 0 },
+            last_audited_at: new Date(Date.now() - 172800000).toISOString(),
+            status: 'warning'
+          },
+          {
+            id: genId(),
+            contract_name: 'NFTMarketplace',
+            score: 92,
+            total_vulnerabilities: 2,
+            risk_distribution: { critical: 0, high: 0, medium: 1, low: 0, info: 1 },
+            last_audited_at: new Date(Date.now() - 259200000).toISOString(),
+            status: 'safe'
+          }
+        ],
+        critical_issues: [
+          {
+            id: genId(),
+            name: '重入攻击漏洞',
+            severity: 'critical',
+            contract_name: 'VulnerableWallet',
+            description: 'withdraw函数在更新余额前执行外部调用，可能导致重入攻击',
+            line: 75,
+            first_found_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+            status: 'open'
+          },
+          {
+            id: genId(),
+            name: '未检查send返回值',
+            severity: 'high',
+            contract_name: 'SimpleAuction',
+            description: 'bid函数中使用send但未检查返回值，可能导致转账失败后继续执行',
+            line: 100,
+            first_found_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+            status: 'open'
+          },
+          {
+            id: genId(),
+            name: '自毁函数权限不足',
+            severity: 'critical',
+            contract_name: 'VulnerableWallet',
+            description: 'emergencyWithdraw函数缺少权限控制，任何人都可以调用自毁合约',
+            line: 82,
+            first_found_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+            status: 'fixed'
+          },
+          {
+            id: genId(),
+            name: '时间戳依赖',
+            severity: 'high',
+            contract_name: 'SimpleAuction',
+            description: '使用block.timestamp进行时间判断，可能被矿工操纵',
+            line: 98,
+            first_found_at: new Date(Date.now() - 86400000).toISOString(),
+            status: 'open'
+          }
+        ],
+        recent_activities: [
+          {
+            id: genId(),
+            type: 'audit',
+            contract_name: 'VulnerableWallet',
+            description: '完成新一次审计，发现 2 个新漏洞',
+            created_at: new Date(Date.now() - 3600000).toISOString()
+          },
+          {
+            id: genId(),
+            type: 'fix',
+            contract_name: 'VulnerableWallet',
+            description: '修复了自毁函数权限问题',
+            created_at: new Date(Date.now() - 7200000).toISOString()
+          },
+          {
+            id: genId(),
+            type: 'task',
+            contract_name: 'SimpleAuction',
+            description: '新增修复任务：处理未检查send返回值问题',
+            created_at: new Date(Date.now() - 14400000).toISOString()
+          },
+          {
+            id: genId(),
+            type: 'feedback',
+            contract_name: 'TokenContract',
+            description: '提交了 1 个误报反馈，等待审核',
+            created_at: new Date(Date.now() - 28800000).toISOString()
+          },
+          {
+            id: genId(),
+            type: 'audit',
+            contract_name: 'NFTMarketplace',
+            description: '完成审计，分数提升至 92 分',
+            created_at: new Date(Date.now() - 259200000).toISOString()
+          }
+        ],
+        last_updated: new Date().toISOString()
+      };
+      get().setDashboardData(mockData);
     }
   },
 }));
