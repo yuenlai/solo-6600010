@@ -18,9 +18,25 @@ if _HAS_PYDANTIC:
     class AuditRequest(BaseModel):
         source_code: str; contract_name: str = "Unknown"; solidity_version: str = "0.8.0"
 
+    class ScoreBreakdown(BaseModel):
+        severity: Severity
+        count: int
+        penalty_per_item: int
+        total_penalty: int
+
+    class ScoreInterpretation(BaseModel):
+        score: float
+        max_possible_score: int
+        total_deduction: int
+        breakdown: list[ScoreBreakdown]
+        risk_weight_summary: str
+        overall_conclusion: str
+        recommendations: list[str]
+
     class AuditResult(BaseModel):
         id: str; contract_name: str; vulnerabilities: list
         score: float; total_lines: int; audited_at: str
+        score_interpretation: ScoreInterpretation | None = None
 
     class BatchAuditRequest(BaseModel):
         contracts: list[AuditRequest]
@@ -30,6 +46,16 @@ if _HAS_PYDANTIC:
         description: str; recommendation: str
         affected_contracts: list[str]
 
+    class BatchScoreInterpretation(BaseModel):
+        average_score: float
+        total_contracts: int
+        total_deduction: float
+        breakdown: list[ScoreBreakdown]
+        risk_distribution: dict[str, int]
+        overall_conclusion: str
+        key_findings: list[str]
+        recommendations: list[str]
+
     class BatchAuditResult(BaseModel):
         id: str; results: list[AuditResult]
         risk_ranking: list[AuditResult]
@@ -38,6 +64,7 @@ if _HAS_PYDANTIC:
         total_vulnerabilities: int
         average_score: float
         audited_at: str
+        score_interpretation: BatchScoreInterpretation | None = None
 
     class CustomRule(BaseModel):
         id: str; name: str; severity: Severity; pattern: str

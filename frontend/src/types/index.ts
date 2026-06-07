@@ -2,9 +2,27 @@ export interface Vulnerability {
   id: string; name: string; severity: "critical"|"high"|"medium"|"low"|"info";
   line: number; description: string; recommendation: string;
 }
+export interface ScoreBreakdown {
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  count: number;
+  penalty_per_item: number;
+  total_penalty: number;
+}
+
+export interface ScoreInterpretation {
+  score: number;
+  max_possible_score: number;
+  total_deduction: number;
+  breakdown: ScoreBreakdown[];
+  risk_weight_summary: string;
+  overall_conclusion: string;
+  recommendations: string[];
+}
+
 export interface AuditResult {
   id: string; contract_name: string; vulnerabilities: Vulnerability[];
   score: number; total_lines: number; audited_at: string;
+  score_interpretation?: ScoreInterpretation;
 }
 export interface AuditRequest {
   source_code: string; contract_name: string; solidity_version?: string;
@@ -14,10 +32,22 @@ export interface CommonIssue {
   count: number; description: string; recommendation: string;
   affected_contracts: string[];
 }
+export interface BatchScoreInterpretation {
+  average_score: number;
+  total_contracts: number;
+  total_deduction: number;
+  breakdown: ScoreBreakdown[];
+  risk_distribution: Record<string, number>;
+  overall_conclusion: string;
+  key_findings: string[];
+  recommendations: string[];
+}
+
 export interface BatchAuditResult {
   id: string; results: AuditResult[]; risk_ranking: AuditResult[];
   common_issues: CommonIssue[]; total_contracts: number;
   total_vulnerabilities: number; average_score: number; audited_at: string;
+  score_interpretation?: BatchScoreInterpretation;
 }
 export interface ContractInput {
   id: string; name: string; source_code: string;

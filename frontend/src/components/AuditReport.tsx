@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuditStore } from '../store/audit';
 import { Vulnerability, FalsePositiveFeedback } from '../types';
+import { ScoreInterpretation } from './ScoreInterpretation';
 
 const SEV_COLORS: Record<string, string> = {
   critical: '#b71c1c', high: '#e53935', medium: '#ff9800', low: '#ffc107', info: '#2196f3'
@@ -93,6 +94,9 @@ export const AuditReport: React.FC = () => {
       >
         {generatingPlan ? '生成中...' : '📋 生成整改计划'}
       </button>
+      {result.score_interpretation && (
+        <ScoreInterpretation interpretation={result.score_interpretation} />
+      )}
       {result.vulnerabilities.map((v: Vulnerability) => {
         const feedback = getFeedbackForVuln(v.id);
         return (
