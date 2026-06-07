@@ -3,7 +3,7 @@ import { useAuditStore } from '../store/audit';
 import axios from 'axios';
 
 export const BatchCodeInput: React.FC = () => {
-  const { batchContracts, addBatchContract, removeBatchContract, updateBatchContract, setBatchResult, setAnalyzing, isAnalyzing } = useAuditStore();
+  const { batchContracts, addBatchContract, removeBatchContract, updateBatchContract, setBatchResult, setAnalyzing, isAnalyzing, setShowTemplateLibrary } = useAuditStore();
   const [activeTab, setActiveTab] = useState<string>(batchContracts[0]?.id || '');
 
   const runBatchAudit = async () => {
@@ -24,6 +24,7 @@ export const BatchCodeInput: React.FC = () => {
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', background: '#1e1e1e', borderBottom: '1px solid #333' }}>
         <span style={{ color: '#aaa', fontSize: '13px' }}>批量审计 ({batchContracts.length}份合约)</span>
         <button onClick={addBatchContract} style={{ padding: '4px 12px', borderRadius: '4px', border: '1px solid #555', background: 'transparent', color: '#ccc', cursor: 'pointer', fontSize: '12px' }}>+ 添加合约</button>
+        <button onClick={() => setShowTemplateLibrary(true)} style={{ padding: '4px 12px', borderRadius: '4px', border: '1px solid #555', background: 'transparent', color: '#ccc', cursor: 'pointer', fontSize: '12px' }}>📚 模板库</button>
         <button onClick={runBatchAudit} disabled={isAnalyzing || batchContracts.filter(c => c.source_code.trim()).length < 2} style={{ padding: '6px 20px', borderRadius: '4px', border: 'none', background: '#e53935', color: '#fff', cursor: 'pointer', fontWeight: 600, marginLeft: 'auto', opacity: (isAnalyzing || batchContracts.filter(c => c.source_code.trim()).length < 2) ? 0.5 : 1 }}>
           {isAnalyzing ? '分析中...' : '开始批量审计'}
         </button>

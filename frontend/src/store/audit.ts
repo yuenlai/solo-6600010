@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { 
   AuditResult, BatchAuditResult, ContractInput, CustomRule, CustomRuleCreate,
-  ContractHistorySummary, AuditHistoryRecord, ContractCompareResult
+  ContractHistorySummary, AuditHistoryRecord, ContractCompareResult,
+  ContractTemplate
 } from '../types';
 
 interface AuditState {
@@ -14,10 +15,13 @@ interface AuditState {
   customRules: CustomRule[];
   showRuleManager: boolean;
   showHistory: boolean;
+  showTemplateLibrary: boolean;
   historySummaries: ContractHistorySummary[];
   selectedContractHistory: AuditHistoryRecord[];
   selectedCompareResult: ContractCompareResult | null;
   selectedContractName: string | null;
+  contractTemplates: ContractTemplate[];
+  selectedTemplate: ContractTemplate | null;
   setMode: (m: 'single' | 'batch') => void;
   setSourceCode: (code: string) => void;
   setResult: (r: AuditResult | null) => void;
@@ -36,6 +40,9 @@ interface AuditState {
   setSelectedContractHistory: (history: AuditHistoryRecord[]) => void;
   setSelectedCompareResult: (result: ContractCompareResult | null) => void;
   setSelectedContractName: (name: string | null) => void;
+  setShowTemplateLibrary: (show: boolean) => void;
+  setContractTemplates: (templates: ContractTemplate[]) => void;
+  setSelectedTemplate: (template: ContractTemplate | null) => void;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -91,10 +98,13 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   customRules: [],
   showRuleManager: false,
   showHistory: false,
+  showTemplateLibrary: false,
   historySummaries: [],
   selectedContractHistory: [],
   selectedCompareResult: null,
   selectedContractName: null,
+  contractTemplates: [],
+  selectedTemplate: null,
   setMode: (m) => set({ mode: m, result: null, batchResult: null }),
   setSourceCode: (code) => set({ sourceCode: code }),
   setResult: (r) => set({ result: r }),
@@ -113,4 +123,7 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   setSelectedContractHistory: (history) => set({ selectedContractHistory: history }),
   setSelectedCompareResult: (result) => set({ selectedCompareResult: result }),
   setSelectedContractName: (name) => set({ selectedContractName: name }),
+  setShowTemplateLibrary: (show) => set({ showTemplateLibrary: show }),
+  setContractTemplates: (templates) => set({ contractTemplates: templates }),
+  setSelectedTemplate: (template) => set({ selectedTemplate: template }),
 }));

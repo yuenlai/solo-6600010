@@ -3,9 +3,11 @@ import uuid
 import hashlib
 from ..models.contract import (
     AuditRequest, AuditResult, BatchAuditRequest, BatchAuditResult, 
-    CustomRule, CustomRuleCreate, AuditHistoryRecord, ContractHistorySummary
+    CustomRule, CustomRuleCreate, AuditHistoryRecord, ContractHistorySummary,
+    ContractTemplate
 )
 from ..services.analyzer import analyze_contract, analyze_batch
+from ..services.templates import get_all_templates, get_template, get_templates_by_category, get_templates_by_severity
 from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter
 
 router = APIRouter(prefix="/audit", tags=["audit"])
@@ -155,4 +157,34 @@ async def compare_contract_history(contract_name: str):
         "vuln_count_change": len(latest.vulnerabilities) - len(first.vulnerabilities),
         "audit_count": len(records),
         "all_scores": [{"version": r.version, "score": r.score, "audited_at": r.audited_at} for r in records]
+    }
+
+@router.get("/templates")
+async def list_templates(category: str | None = None, severity: str | None = None) -> list[ContractTemplate]:
+    if category:
+        return get_templates_by_category(category)
+    if severity:
+        from ..models.contract import Severity
+        try:
+            sev = Severity(severity)
+            return get_templates_by_severity(sev)
+        except ValueError:
+            raise HTTPException(400, "Invalid severity")
+    return get_all_templates()
+
+@router.get("/templates/{template_id}")
+async def get_template_by_id(template_id: str) -> ContractTemplate:
+    template = get_template(template_id)
+    if template:
+        return template
+    raise HTTPException(404, "Template not found")
+
+@router.post("/templates/{template_id}/apply")
+async def apply_template(template_id: str) -> dict:
+    template = get_template(template_id)
+    if not template:
+        raise HTTPException(404, "Template not found")
+    return {
+        "source_code": template.source_code,
+        "contract_name": template.name
     }

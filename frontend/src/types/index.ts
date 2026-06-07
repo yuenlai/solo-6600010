@@ -56,3 +56,17 @@ export interface ContractCompareResult {
   audit_count: number;
   all_scores: ScoreDataPoint[];
 }
+
+export interface ContractTemplate {
+  id: string;
+  name: string;
+  category: string;
+  severity: "critical" | "high" | "medium";
+  difficulty: "beginner" | "intermediate" | "advanced";
+  description: string;
+  vulnerability_types: string[];
+  source_code: string;
+  expected_vulnerabilities: string[];
+  learning_points: string[];
+  real_world_examples: string[];
+}

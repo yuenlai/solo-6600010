@@ -5,10 +5,11 @@ import { BatchCodeInput } from './components/BatchCodeInput';
 import { BatchAuditReport } from './components/BatchAuditReport';
 import { CustomRuleManager } from './components/CustomRuleManager';
 import { AuditHistory } from './components/AuditHistory';
+import { ContractTemplateLibrary } from './components/ContractTemplateLibrary';
 import { useAuditStore } from './store/audit';
 
 const App: React.FC = () => {
-  const { mode, setMode, setShowRuleManager, customRules, setShowHistory } = useAuditStore();
+  const { mode, setMode, setShowRuleManager, customRules, setShowHistory, setShowTemplateLibrary } = useAuditStore();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', background: '#2d2d2d', borderBottom: '1px solid #444', gap: '16px' }}>
@@ -18,6 +19,12 @@ const App: React.FC = () => {
           <button onClick={() => setMode('batch')} style={{ padding: '6px 16px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 500, background: mode === 'batch' ? '#e53935' : 'transparent', color: mode === 'batch' ? '#fff' : '#ccc' }}>批量对比审计</button>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+          <button onClick={() => setShowTemplateLibrary(true)} style={{
+            padding: '6px 16px', border: '1px solid #666', borderRadius: '4px',
+            cursor: 'pointer', fontWeight: 500, background: 'transparent', color: '#ccc'
+          }}>
+            📚 高危模板库
+          </button>
           <button onClick={() => setShowHistory(true)} style={{
             padding: '6px 16px', border: '1px solid #666', borderRadius: '4px',
             cursor: 'pointer', fontWeight: 500, background: 'transparent', color: '#ccc'
@@ -37,6 +44,7 @@ const App: React.FC = () => {
       </div>
       <CustomRuleManager />
       <AuditHistory />
+      <ContractTemplateLibrary />
     </div>
   );
 };

@@ -52,3 +52,16 @@ class ContractHistorySummary(BaseModel):
     first_audit_at: str
     latest_audit_at: str
     score_trend: str
+
+class ContractTemplate(BaseModel):
+    id: str
+    name: str
+    category: str
+    severity: Severity
+    difficulty: str
+    description: str
+    vulnerability_types: list[str]
+    source_code: str
+    expected_vulnerabilities: list[str]
+    learning_points: list[str]
+    real_world_examples: list[str]

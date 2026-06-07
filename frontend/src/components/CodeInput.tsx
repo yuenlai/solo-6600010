@@ -3,7 +3,7 @@ import { useAuditStore } from '../store/audit';
 import axios from 'axios';
 
 export const CodeInput: React.FC = () => {
-  const { sourceCode, setSourceCode, setResult, setAnalyzing } = useAuditStore();
+  const { sourceCode, setSourceCode, setResult, setAnalyzing, setShowTemplateLibrary } = useAuditStore();
   const runAudit = async () => {
     setAnalyzing(true);
     try {
@@ -16,8 +16,12 @@ export const CodeInput: React.FC = () => {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', background: '#1e1e1e' }}>
         <span style={{ color: '#aaa', fontSize: '13px' }}>Solidity</span>
+        <button onClick={() => setShowTemplateLibrary(true)} style={{
+          padding: '4px 12px', borderRadius: '4px', border: '1px solid #555',
+          background: 'transparent', color: '#ccc', cursor: 'pointer', fontSize: '12px'
+        }}>📚 模板库</button>
         <button onClick={runAudit} style={{ padding: '6px 20px', borderRadius: '4px', border: 'none',
-          background: '#e53935', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>Audit</button>
+          background: '#e53935', color: '#fff', cursor: 'pointer', fontWeight: 600, marginLeft: 'auto' }}>Audit</button>
       </div>
       <textarea value={sourceCode} onChange={e => setSourceCode(e.target.value)}
         style={{ flex: 1, fontFamily: 'monospace', fontSize: '13px', padding: '16px', border: 'none',
