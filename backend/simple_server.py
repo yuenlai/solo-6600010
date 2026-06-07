@@ -606,8 +606,18 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(result).encode())
             return
 
-        if path.startswith("/api/audit/false-positive/"):
-            feedback_id = path.split("/")[-1]
+        path_parts = path.split("/")
+        if len(path_parts) == 6 and path_parts[1] == "api" and path_parts[2] == "audit" and path_parts[3] == "false-positive" and path_parts[4] and path_parts[5] == "":
+            feedback_id = path_parts[4]
+            if feedback_id in false_positive_feedbacks:
+                self._set_headers()
+                self.wfile.write(json.dumps(false_positive_feedbacks[feedback_id]).encode())
+                return
+            self._set_headers(404)
+            self.wfile.write(json.dumps({"error": "Feedback not found"}).encode())
+            return
+        if len(path_parts) == 5 and path_parts[1] == "api" and path_parts[2] == "audit" and path_parts[3] == "false-positive" and path_parts[4]:
+            feedback_id = path_parts[4]
             if feedback_id in false_positive_feedbacks:
                 self._set_headers()
                 self.wfile.write(json.dumps(false_positive_feedbacks[feedback_id]).encode())
@@ -793,9 +803,25 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(updated_rule).encode())
             return
 
-        if path.startswith("/api/audit/false-positive/") and path.endswith("/review"):
-            parts = path.split("/")
-            feedback_id = parts[-2]
+        put_parts = path.split("/")
+        if (len(put_parts) == 7 and put_parts[1] == "api" and put_parts[2] == "audit" and 
+            put_parts[3] == "false-positive" and put_parts[4] and put_parts[5] == "review" and put_parts[6] == ""):
+            feedback_id = put_parts[4]
+            if feedback_id not in false_positive_feedbacks:
+                self._set_headers(404)
+                self.wfile.write(json.dumps({"error": "Feedback not found"}).encode())
+                return
+            feedback = false_positive_feedbacks[feedback_id]
+            feedback["status"] = data.get("status", feedback["status"])
+            feedback["feedback_note"] = data.get("feedback_note", feedback.get("feedback_note"))
+            feedback["reviewed_at"] = datetime.now().isoformat()
+            false_positive_feedbacks[feedback_id] = feedback
+            self._set_headers()
+            self.wfile.write(json.dumps(feedback).encode())
+            return
+        if (len(put_parts) == 6 and put_parts[1] == "api" and put_parts[2] == "audit" and 
+            put_parts[3] == "false-positive" and put_parts[4] and put_parts[5] == "review"):
+            feedback_id = put_parts[4]
             if feedback_id not in false_positive_feedbacks:
                 self._set_headers(404)
                 self.wfile.write(json.dumps({"error": "Feedback not found"}).encode())

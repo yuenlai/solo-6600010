@@ -1,4 +1,11 @@
-from fastapi import APIRouter, HTTPException
+try:
+    from fastapi import APIRouter, HTTPException
+    _HAS_FASTAPI = True
+except ImportError:
+    _HAS_FASTAPI = False
+    APIRouter = None
+    HTTPException = Exception
+
 import uuid
 import hashlib
 from datetime import datetime
@@ -7,12 +14,37 @@ from ..models.contract import (
     CustomRule, CustomRuleCreate, AuditHistoryRecord, ContractHistorySummary,
     FalsePositiveFeedback, FalsePositiveFeedbackCreate, FalsePositiveFeedbackStatus
 )
-from ..services.analyzer import analyze_contract, analyze_batch
+try:
+    from ..services.analyzer import analyze_contract, analyze_batch
+except ImportError:
+    analyze_contract = None
+    analyze_batch = None
 from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks
 
-router = APIRouter(prefix="/audit", tags=["audit"])
+class DummyRouter:
+    def post(self, path):
+        def decorator(func):
+            return func
+        return decorator
+    def get(self, path):
+        def decorator(func):
+            return func
+        return decorator
+    def put(self, path):
+        def decorator(func):
+            return func
+        return decorator
+    def delete(self, path):
+        def decorator(func):
+            return func
+        return decorator
 
-def archive_audit_result(result: AuditResult, source_code: str):
+if _HAS_FASTAPI and APIRouter:
+    router = APIRouter(prefix="/audit", tags=["audit"])
+else:
+    router = DummyRouter()
+
+def archive_audit_result(result, source_code):
     source_hash = hashlib.md5(source_code.encode()).hexdigest()
     contract_name = result.contract_name
     
