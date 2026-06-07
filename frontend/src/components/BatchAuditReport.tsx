@@ -1,0 +1,104 @@
+import React, { useState } from 'react';
+import { useAuditStore } from '../store/audit';
+import { AuditResult, CommonIssue } from '../types';
+
+const SEV_COLORS: Record<string, string> = {
+  critical: '#b71c1c', high: '#e53935', medium: '#ff9800', low: '#ffc107', info: '#2196f3'
+};
+
+export const BatchAuditReport: React.FC = () => {
+  const { batchResult } = useAuditStore();
+  const [view, setView] = useState<'ranking' | 'common'>('ranking');
+  const [selectedContract, setSelectedContract] = useState<AuditResult | null>(null);
+
+  if (!batchResult) return <div style={{ width: '500px', padding: '20px', color: '#999' }}>提交批量审计以查看对比结果</div>;
+
+  if (selectedContract) {
+    return (
+      <div style={{ width: '500px', padding: '20px', overflow: 'auto', borderLeft: '1px solid #e0e0e0' }}>
+        <button onClick={() => setSelectedContract(null)} style={{ marginBottom: '12px', padding: '6px 12px', border: '1px solid #ddd', borderRadius: '4px', background: '#fff', cursor: 'pointer' }}>← 返回列表</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: selectedContract.score >= 80 ? '#e8f5e9' : selectedContract.score >= 50 ? '#fff3e0' : '#ffebee',
+            fontSize: '24px', fontWeight: 'bold', color: selectedContract.score >= 80 ? '#2e7d32' : selectedContract.score >= 50 ? '#e65100' : '#b71c1c' }}>
+            {selectedContract.score}</div>
+          <div><div style={{ fontWeight: 600 }}>{selectedContract.contract_name}</div>
+            <div style={{ fontSize: '12px', color: '#888' }}>{selectedContract.vulnerabilities.length} 个问题 · {selectedContract.total_lines} 行</div></div>
+        </div>
+        {selectedContract.vulnerabilities.map((v: any) => (
+          <div key={v.id} style={{ padding: '12px', marginBottom: '8px', borderRadius: '8px',
+            borderLeft: `4px solid ${SEV_COLORS[v.severity] || '#ccc'}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 600, fontSize: '13px' }}>{v.name}</span>
+              <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '10px', color: '#fff',
+                background: SEV_COLORS[v.severity] }}>{v.severity}</span>
+            </div>
+            <div style={{ fontSize: '12px', color: '#666', margin: '4px 0' }}>第 {v.line} 行: {v.description}</div>
+            <div style={{ fontSize: '11px', color: '#2e7d32' }}>{v.recommendation}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ width: '500px', padding: '20px', overflow: 'auto', borderLeft: '1px solid #e0e0e0' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+        <button onClick={() => setView('ranking')} style={{ flex: 1, padding: '8px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, background: view === 'ranking' ? '#e53935' : '#f0f0f0', color: view === 'ranking' ? '#fff' : '#333' }}>风险排行</button>
+        <button onClick={() => setView('common')} style={{ flex: 1, padding: '8px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, background: view === 'common' ? '#e53935' : '#f0f0f0', color: view === 'common' ? '#fff' : '#333' }}>共性问题</button>
+      </div>
+
+      <div style={{ padding: '16px', background: '#f5f5f5', borderRadius: '8px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center' }}>
+          <div><div style={{ fontSize: '24px', fontWeight: 'bold', color: '#e53935' }}>{batchResult.total_contracts}</div><div style={{ fontSize: '12px', color: '#666' }}>合约数量</div></div>
+          <div><div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ff9800' }}>{batchResult.total_vulnerabilities}</div><div style={{ fontSize: '12px', color: '#666' }}>问题总数</div></div>
+          <div><div style={{ fontSize: '24px', fontWeight: 'bold', color: batchResult.average_score >= 80 ? '#2e7d32' : batchResult.average_score >= 50 ? '#e65100' : '#b71c1c' }}>{batchResult.average_score}</div><div style={{ fontSize: '12px', color: '#666' }}>平均分</div></div>
+        </div>
+      </div>
+
+      {view === 'ranking' && (
+        <div>
+          <h4 style={{ margin: '8px 0 12px', color: '#333' }}>风险从高到低</h4>
+          {batchResult.risk_ranking.map((r: AuditResult, i: number) => (
+            <div key={r.id} onClick={() => setSelectedContract(r)} style={{ padding: '12px', marginBottom: '8px', borderRadius: '8px', background: '#fafafa', cursor: 'pointer', border: '1px solid #eee', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: i < 3 ? '#ffebee' : '#f0f0f0', color: i < 3 ? '#b71c1c' : '#666', fontWeight: 'bold', fontSize: '14px' }}>{i + 1}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: '13px' }}>{r.contract_name}</div>
+                <div style={{ fontSize: '11px', color: '#888' }}>{r.vulnerabilities.length} 个问题</div>
+              </div>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: r.score >= 80 ? '#e8f5e9' : r.score >= 50 ? '#fff3e0' : '#ffebee',
+                fontSize: '16px', fontWeight: 'bold', color: r.score >= 80 ? '#2e7d32' : r.score >= 50 ? '#e65100' : '#b71c1c' }}>{r.score}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {view === 'common' && (
+        <div>
+          <h4 style={{ margin: '8px 0 12px', color: '#333' }}>共性问题汇总</h4>
+          {batchResult.common_issues.length === 0 && <div style={{ color: '#999', fontSize: '13px' }}>未发现共性问题</div>}
+          {batchResult.common_issues.map((issue: CommonIssue) => (
+            <div key={issue.name} style={{ padding: '12px', marginBottom: '8px', borderRadius: '8px',
+              borderLeft: `4px solid ${SEV_COLORS[issue.severity] || '#ccc'}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 600, fontSize: '13px' }}>{issue.name}</span>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '10px', color: '#fff', background: SEV_COLORS[issue.severity] }}>{issue.severity}</span>
+                  <span style={{ fontSize: '11px', color: '#666', background: '#f0f0f0', padding: '2px 6px', borderRadius: '4px' }}>{issue.count} 次出现</span>
+                </div>
+              </div>
+              <div style={{ fontSize: '12px', color: '#666', margin: '4px 0' }}>{issue.description}</div>
+              <div style={{ fontSize: '11px', color: '#2e7d32' }}>{issue.recommendation}</div>
+              <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {issue.affected_contracts.map(c => (
+                  <span key={c} style={{ fontSize: '10px', padding: '2px 6px', background: '#e3f2fd', color: '#1565c0', borderRadius: '4px' }}>{c}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};

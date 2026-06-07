@@ -1,6 +1,7 @@
 import re, uuid
 from datetime import datetime
-from ..models.contract import Vulnerability, Severity, AuditResult
+from collections import defaultdict
+from ..models.contract import Vulnerability, Severity, AuditResult, CommonIssue, BatchAuditResult, AuditRequest
 
 PATTERNS = [
     {"name": "Reentrancy", "severity": Severity.critical, "pattern": r"\.call\{value:",
@@ -30,3 +31,44 @@ def analyze_contract(source_code: str, contract_name: str) -> AuditResult:
     score = max(0, 100 - sum(penalty.get(v.severity.value, 0) for v in vulns))
     return AuditResult(id=str(uuid.uuid4()), contract_name=contract_name,
         vulnerabilities=vulns, score=score, total_lines=len(lines), audited_at=datetime.now().isoformat())
+
+SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+
+def analyze_batch(contracts: list[AuditRequest]) -> BatchAuditResult:
+    results = [analyze_contract(c.source_code, c.contract_name) for c in contracts]
+    risk_ranking = sorted(results, key=lambda r: (r.score, -len([v for v in r.vulnerabilities if v.severity == Severity.critical])))
+    issue_map = defaultdict(lambda: {"count": 0, "contracts": set(), "description": "", "recommendation": "", "severity": Severity.low})
+    for r in results:
+        seen = set()
+        for v in r.vulnerabilities:
+            key = v.name
+            issue_map[key]["count"] += 1
+            issue_map[key]["contracts"].add(r.contract_name)
+            issue_map[key]["description"] = v.description
+            issue_map[key]["recommendation"] = v.recommendation
+            issue_map[key]["severity"] = v.severity
+            seen.add(key)
+    common_issues = [
+        CommonIssue(
+            name=name,
+            severity=data["severity"],
+            count=data["count"],
+            description=data["description"],
+            recommendation=data["recommendation"],
+            affected_contracts=list(data["contracts"])
+        )
+        for name, data in issue_map.items()
+    ]
+    common_issues.sort(key=lambda x: (SEVERITY_ORDER[x.severity.value], -x.count))
+    total_vulns = sum(len(r.vulnerabilities) for r in results)
+    avg_score = sum(r.score for r in results) / len(results) if results else 0
+    return BatchAuditResult(
+        id=str(uuid.uuid4()),
+        results=results,
+        risk_ranking=risk_ranking,
+        common_issues=common_issues,
+        total_contracts=len(results),
+        total_vulnerabilities=total_vulns,
+        average_score=round(avg_score, 2),
+        audited_at=datetime.now().isoformat()
+    )
