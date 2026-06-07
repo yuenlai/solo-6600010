@@ -39,15 +39,16 @@ def analyze_batch(contracts: list[AuditRequest]) -> BatchAuditResult:
     risk_ranking = sorted(results, key=lambda r: (r.score, -len([v for v in r.vulnerabilities if v.severity == Severity.critical])))
     issue_map = defaultdict(lambda: {"count": 0, "contracts": set(), "description": "", "recommendation": "", "severity": Severity.low})
     for r in results:
-        seen = set()
+        seen_in_contract = set()
         for v in r.vulnerabilities:
             key = v.name
-            issue_map[key]["count"] += 1
+            if key not in seen_in_contract:
+                issue_map[key]["count"] += 1
+                seen_in_contract.add(key)
             issue_map[key]["contracts"].add(r.contract_name)
             issue_map[key]["description"] = v.description
             issue_map[key]["recommendation"] = v.recommendation
             issue_map[key]["severity"] = v.severity
-            seen.add(key)
     common_issues = [
         CommonIssue(
             name=name,
@@ -58,6 +59,7 @@ def analyze_batch(contracts: list[AuditRequest]) -> BatchAuditResult:
             affected_contracts=list(data["contracts"])
         )
         for name, data in issue_map.items()
+        if len(data["contracts"]) >= 2
     ]
     common_issues.sort(key=lambda x: (SEVERITY_ORDER[x.severity.value], -x.count))
     total_vulns = sum(len(r.vulnerabilities) for r in results)
