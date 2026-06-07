@@ -1,12 +1,14 @@
 from fastapi import APIRouter, HTTPException
 import uuid
 import hashlib
+from datetime import datetime
 from ..models.contract import (
     AuditRequest, AuditResult, BatchAuditRequest, BatchAuditResult, 
-    CustomRule, CustomRuleCreate, AuditHistoryRecord, ContractHistorySummary
+    CustomRule, CustomRuleCreate, AuditHistoryRecord, ContractHistorySummary,
+    FalsePositiveFeedback, FalsePositiveFeedbackCreate, FalsePositiveFeedbackStatus
 )
 from ..services.analyzer import analyze_contract, analyze_batch
-from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter
+from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -634,3 +636,50 @@ async def apply_template(template_id: str):
                 "contract_name": t["name"]
             }
     raise HTTPException(404, "Template not found")
+
+@router.post("/false-positive")
+async def create_false_positive_feedback(feedback: FalsePositiveFeedbackCreate) -> FalsePositiveFeedback:
+    feedback_id = str(uuid.uuid4())[:8]
+    now = datetime.now().isoformat()
+    new_feedback = FalsePositiveFeedback(
+        id=feedback_id,
+        audit_id=feedback.audit_id,
+        vulnerability_id=feedback.vulnerability_id,
+        vulnerability_name=feedback.vulnerability_name,
+        contract_name=feedback.contract_name,
+        reason=feedback.reason,
+        status=FalsePositiveFeedbackStatus.pending,
+        created_at=now
+    )
+    false_positive_feedbacks[feedback_id] = new_feedback
+    return new_feedback
+
+@router.get("/false-positive")
+async def list_false_positive_feedbacks(audit_id: str | None = None, contract_name: str | None = None) -> list[FalsePositiveFeedback]:
+    result = list(false_positive_feedbacks.values())
+    if audit_id:
+        result = [f for f in result if f.audit_id == audit_id]
+    if contract_name:
+        result = [f for f in result if f.contract_name == contract_name]
+    return sorted(result, key=lambda f: f.created_at, reverse=True)
+
+@router.get("/false-positive/{feedback_id}")
+async def get_false_positive_feedback(feedback_id: str) -> FalsePositiveFeedback:
+    if feedback_id not in false_positive_feedbacks:
+        raise HTTPException(404, "Feedback not found")
+    return false_positive_feedbacks[feedback_id]
+
+@router.put("/false-positive/{feedback_id}/review")
+async def review_false_positive_feedback(
+    feedback_id: str, 
+    status: FalsePositiveFeedbackStatus, 
+    feedback_note: str | None = None
+) -> FalsePositiveFeedback:
+    if feedback_id not in false_positive_feedbacks:
+        raise HTTPException(404, "Feedback not found")
+    feedback = false_positive_feedbacks[feedback_id]
+    feedback.status = status
+    feedback.feedback_note = feedback_note
+    feedback.reviewed_at = datetime.now().isoformat()
+    false_positive_feedbacks[feedback_id] = feedback
+    return feedback

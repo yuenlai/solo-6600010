@@ -52,3 +52,27 @@ class ContractHistorySummary(BaseModel):
     first_audit_at: str
     latest_audit_at: str
     score_trend: str
+
+class FalsePositiveFeedbackStatus(str, Enum):
+    pending = "pending"
+    accepted = "accepted"
+    rejected = "rejected"
+
+class FalsePositiveFeedback(BaseModel):
+    id: str
+    audit_id: str
+    vulnerability_id: str
+    vulnerability_name: str
+    contract_name: str
+    reason: str
+    status: FalsePositiveFeedbackStatus
+    feedback_note: str | None = None
+    created_at: str
+    reviewed_at: str | None = None
+
+class FalsePositiveFeedbackCreate(BaseModel):
+    audit_id: str
+    vulnerability_id: str
+    vulnerability_name: str
+    contract_name: str
+    reason: str

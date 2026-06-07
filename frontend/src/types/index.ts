@@ -70,3 +70,26 @@ export interface ContractTemplate {
   learning_points: string[];
   real_world_examples: string[];
 }
+
+export type FalsePositiveFeedbackStatus = "pending" | "accepted" | "rejected";
+
+export interface FalsePositiveFeedback {
+  id: string;
+  audit_id: string;
+  vulnerability_id: string;
+  vulnerability_name: string;
+  contract_name: string;
+  reason: string;
+  status: FalsePositiveFeedbackStatus;
+  feedback_note?: string;
+  created_at: string;
+  reviewed_at?: string;
+}
+
+export interface FalsePositiveFeedbackCreate {
+  audit_id: string;
+  vulnerability_id: string;
+  vulnerability_name: string;
+  contract_name: string;
+  reason: string;
+}

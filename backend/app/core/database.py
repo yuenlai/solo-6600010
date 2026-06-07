@@ -4,3 +4,4 @@ contract_templates = {}
 custom_rules = {}
 audit_history = {}
 contract_version_counter = {}
+false_positive_feedbacks = {}

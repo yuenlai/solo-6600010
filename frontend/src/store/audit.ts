@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { 
   AuditResult, BatchAuditResult, ContractInput, CustomRule, CustomRuleCreate,
   ContractHistorySummary, AuditHistoryRecord, ContractCompareResult,
-  ContractTemplate
+  ContractTemplate, FalsePositiveFeedback, FalsePositiveFeedbackCreate
 } from '../types';
 
 interface AuditState {
@@ -43,6 +43,11 @@ interface AuditState {
   setShowTemplateLibrary: (show: boolean) => void;
   setContractTemplates: (templates: ContractTemplate[]) => void;
   setSelectedTemplate: (template: ContractTemplate | null) => void;
+  falsePositiveFeedbacks: FalsePositiveFeedback[];
+  setFalsePositiveFeedbacks: (feedbacks: FalsePositiveFeedback[]) => void;
+  addFalsePositiveFeedback: (feedback: FalsePositiveFeedback) => void;
+  submitFalsePositiveFeedback: (data: FalsePositiveFeedbackCreate) => Promise<FalsePositiveFeedback>;
+  fetchFalsePositiveFeedbacks: (auditId?: string) => Promise<void>;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -105,6 +110,7 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   selectedContractName: null,
   contractTemplates: [],
   selectedTemplate: null,
+  falsePositiveFeedbacks: [],
   setMode: (m) => set({ mode: m, result: null, batchResult: null }),
   setSourceCode: (code) => set({ sourceCode: code }),
   setResult: (r) => set({ result: r }),
@@ -126,4 +132,22 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   setShowTemplateLibrary: (show) => set({ showTemplateLibrary: show }),
   setContractTemplates: (templates) => set({ contractTemplates: templates }),
   setSelectedTemplate: (template) => set({ selectedTemplate: template }),
+  setFalsePositiveFeedbacks: (feedbacks) => set({ falsePositiveFeedbacks: feedbacks }),
+  addFalsePositiveFeedback: (feedback) => set({ falsePositiveFeedbacks: [feedback, ...get().falsePositiveFeedbacks] }),
+  submitFalsePositiveFeedback: async (data) => {
+    const res = await fetch('/api/audit/false-positive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const feedback = await res.json();
+    get().addFalsePositiveFeedback(feedback);
+    return feedback;
+  },
+  fetchFalsePositiveFeedbacks: async (auditId) => {
+    const url = auditId ? `/api/audit/false-positive?audit_id=${auditId}` : '/api/audit/false-positive';
+    const res = await fetch(url);
+    const feedbacks = await res.json();
+    get().setFalsePositiveFeedbacks(feedbacks);
+  },
 }));
