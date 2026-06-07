@@ -136,6 +136,49 @@ if _HAS_PYDANTIC:
         assignee: str | None = None
         due_date: str | None = None
         notes: str | None = None
+
+    class RiskDistribution(BaseModel):
+        critical: int = 0
+        high: int = 0
+        medium: int = 0
+        low: int = 0
+        info: int = 0
+
+    class ProjectContractSummary(BaseModel):
+        id: str
+        contract_name: str
+        score: float
+        total_vulnerabilities: int
+        risk_distribution: RiskDistribution
+        last_audited_at: str
+        status: str
+
+    class CriticalIssue(BaseModel):
+        id: str
+        name: str
+        severity: Severity
+        contract_name: str
+        description: str
+        line: int
+        first_found_at: str
+        status: str
+
+    class RecentActivity(BaseModel):
+        id: str
+        type: str
+        contract_name: str
+        description: str
+        created_at: str
+
+    class ProjectDashboardData(BaseModel):
+        total_contracts: int
+        total_vulnerabilities: int
+        average_score: float
+        risk_distribution: RiskDistribution
+        contracts: list[ProjectContractSummary]
+        critical_issues: list[CriticalIssue]
+        recent_activities: list[RecentActivity]
+        last_updated: str
 else:
     class Vulnerability:
         pass
@@ -184,4 +227,14 @@ else:
     class AuditTaskItemCreate:
         pass
     class AuditTaskItemUpdate:
+        pass
+    class RiskDistribution:
+        pass
+    class ProjectContractSummary:
+        pass
+    class CriticalIssue:
+        pass
+    class RecentActivity:
+        pass
+    class ProjectDashboardData:
         pass

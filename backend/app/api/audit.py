@@ -14,7 +14,9 @@ from ..models.contract import (
     CustomRule, CustomRuleCreate, AuditHistoryRecord, ContractHistorySummary,
     FalsePositiveFeedback, FalsePositiveFeedbackCreate, FalsePositiveFeedbackStatus,
     AuditTaskList, AuditTaskListCreate, AuditTaskItem, AuditTaskItemCreate,
-    AuditTaskItemUpdate, AuditTaskStatus
+    AuditTaskItemUpdate, AuditTaskStatus,
+    RiskDistribution, ProjectContractSummary, CriticalIssue, RecentActivity,
+    ProjectDashboardData, Severity
 )
 try:
     from ..services.analyzer import analyze_contract, analyze_batch
@@ -823,3 +825,186 @@ async def delete_task_item(list_id: str, task_id: str):
     task_list.updated_at = datetime.now().isoformat()
     audit_task_lists[list_id] = task_list
     return {"message": "Task item deleted"}
+
+def calculate_risk_distribution(vulnerabilities: list) -> RiskDistribution:
+    dist = RiskDistribution()
+    for v in vulnerabilities:
+        sev = v.severity.value if hasattr(v.severity, 'value') else str(v.severity)
+        if sev == 'critical':
+            dist.critical += 1
+        elif sev == 'high':
+            dist.high += 1
+        elif sev == 'medium':
+            dist.medium += 1
+        elif sev == 'low':
+            dist.low += 1
+        else:
+            dist.info += 1
+    return dist
+
+def get_contract_status(score: float) -> str:
+    if score >= 80:
+        return 'safe'
+    elif score >= 50:
+        return 'warning'
+    else:
+        return 'danger'
+
+@router.get("/dashboard")
+async def get_project_dashboard() -> ProjectDashboardData:
+    all_contracts = {}
+    
+    for result in audit_results.values():
+        name = result.contract_name
+        if name not in all_contracts:
+            all_contracts[name] = {
+                'latest_result': result,
+                'all_vulnerabilities': {},
+                'first_found': {}
+            }
+        else:
+            existing = all_contracts[name]['latest_result']
+            if result.audited_at > existing.audited_at:
+                all_contracts[name]['latest_result'] = result
+    
+    for contract_name, records in audit_history.items():
+        if records:
+            sorted_records = sorted(records, key=lambda r: r.audited_at)
+            latest = sorted_records[-1]
+            if contract_name not in all_contracts:
+                all_contracts[contract_name] = {
+                    'latest_result': latest,
+                    'all_vulnerabilities': {},
+                    'first_found': {}
+                }
+            else:
+                existing = all_contracts[contract_name]['latest_result']
+                if latest.audited_at > existing.audited_at:
+                    all_contracts[contract_name]['latest_result'] = latest
+            
+            for record in sorted_records:
+                for v in record.vulnerabilities:
+                    vid = f"{v.name}_{v.line}"
+                    if vid not in all_contracts[contract_name]['all_vulnerabilities']:
+                        all_contracts[contract_name]['all_vulnerabilities'][vid] = v
+                        all_contracts[contract_name]['first_found'][vid] = record.audited_at
+    
+    completed_tasks = {}
+    for task_list in audit_task_lists.values():
+        for task in task_list.tasks:
+            if task.status == AuditTaskStatus.completed:
+                key = f"{task_list.contract_name}_{task.title}"
+                completed_tasks[key] = task
+    
+    contract_summaries = []
+    total_vulns = 0
+    total_score = 0
+    overall_dist = RiskDistribution()
+    
+    for contract_name, data in all_contracts.items():
+        result = data['latest_result']
+        risk_dist = calculate_risk_distribution(result.vulnerabilities)
+        status = get_contract_status(result.score)
+        
+        contract_summaries.append(ProjectContractSummary(
+            id=str(uuid.uuid4())[:8],
+            contract_name=contract_name,
+            score=result.score,
+            total_vulnerabilities=len(result.vulnerabilities),
+            risk_distribution=risk_dist,
+            last_audited_at=result.audited_at,
+            status=status
+        ))
+        
+        total_vulns += len(result.vulnerabilities)
+        total_score += result.score
+        overall_dist.critical += risk_dist.critical
+        overall_dist.high += risk_dist.high
+        overall_dist.medium += risk_dist.medium
+        overall_dist.low += risk_dist.low
+        overall_dist.info += risk_dist.info
+    
+    contract_summaries.sort(key=lambda c: c.score)
+    
+    critical_issues = []
+    for contract_name, data in all_contracts.items():
+        result = data['latest_result']
+        for v in result.vulnerabilities:
+            sev = v.severity.value if hasattr(v.severity, 'value') else str(v.severity)
+            if sev in ['critical', 'high']:
+                vid = f"{v.name}_{v.line}"
+                first_found = data['first_found'].get(vid, result.audited_at)
+                
+                task_key = f"{contract_name}_{v.name}"
+                is_fixed = task_key in completed_tasks
+                
+                critical_issues.append(CriticalIssue(
+                    id=str(uuid.uuid4())[:8],
+                    name=v.name,
+                    severity=v.severity,
+                    contract_name=contract_name,
+                    description=v.description,
+                    line=v.line,
+                    first_found_at=first_found,
+                    status='fixed' if is_fixed else 'open'
+                ))
+    
+    critical_issues.sort(key=lambda x: (
+        0 if (x.severity.value if hasattr(x.severity, 'value') else str(x.severity)) == 'critical' else 1,
+        x.first_found_at
+    ))
+    
+    recent_activities = []
+    
+    for contract_name, records in audit_history.items():
+        for record in sorted(records, key=lambda r: r.audited_at, reverse=True)[:2]:
+            recent_activities.append({
+                'id': str(uuid.uuid4())[:8],
+                'type': 'audit',
+                'contract_name': contract_name,
+                'description': f'完成审计，发现 {len(record.vulnerabilities)} 个漏洞，安全分 {record.score}',
+                'created_at': record.audited_at
+            })
+    
+    for feedback in sorted(false_positive_feedbacks.values(), key=lambda f: f.created_at, reverse=True)[:5]:
+        recent_activities.append({
+            'id': str(uuid.uuid4())[:8],
+            'type': 'feedback',
+            'contract_name': feedback.contract_name,
+            'description': f'提交误报反馈: {feedback.vulnerability_name} ({feedback.status.value if hasattr(feedback.status, "value") else feedback.status})',
+            'created_at': feedback.created_at
+        })
+    
+    for task_list in audit_task_lists.values():
+        for task in sorted(task_list.tasks, key=lambda t: t.created_at if hasattr(t, 'created_at') else t.completed_at or '', reverse=True)[:2]:
+            desc = f'任务: {task.title}'
+            if hasattr(task, 'status') and task.status == AuditTaskStatus.completed:
+                desc = f'完成修复任务: {task.title}'
+                created = task.completed_at or task_list.updated_at
+            else:
+                created = task_list.updated_at
+            recent_activities.append({
+                'id': str(uuid.uuid4())[:8],
+                'type': 'task' if hasattr(task, 'status') and task.status != AuditTaskStatus.completed else 'fix',
+                'contract_name': task_list.contract_name,
+                'description': desc,
+                'created_at': created
+            })
+    
+    recent_activities.sort(key=lambda a: a['created_at'], reverse=True)
+    recent_activities = recent_activities[:10]
+    
+    recent_activity_objs = [RecentActivity(**a) for a in recent_activities]
+    
+    avg_score = round(total_score / len(contract_summaries), 2) if contract_summaries else 0
+    
+    return ProjectDashboardData(
+        total_contracts=len(contract_summaries),
+        total_vulnerabilities=total_vulns,
+        average_score=avg_score,
+        risk_distribution=overall_dist,
+        contracts=contract_summaries,
+        critical_issues=critical_issues,
+        recent_activities=recent_activity_objs,
+        last_updated=datetime.now().isoformat()
+    )
