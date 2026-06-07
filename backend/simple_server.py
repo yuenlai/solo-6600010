@@ -481,6 +481,7 @@ batch_audit_results = {}
 custom_rules = {}
 audit_history = {}
 contract_version_counter = {}
+false_positive_feedbacks = {}
 
 def analyze_contract(source_code, contract_name):
     vulns = []
@@ -590,6 +591,29 @@ class RequestHandler(BaseHTTPRequestHandler):
         if path == "/api/audit/rules":
             self._set_headers()
             self.wfile.write(json.dumps(list(custom_rules.values())).encode())
+            return
+
+        if path == "/api/audit/false-positive":
+            audit_id = params.get("audit_id", [None])[0]
+            contract_name = params.get("contract_name", [None])[0]
+            result = list(false_positive_feedbacks.values())
+            if audit_id:
+                result = [f for f in result if f["audit_id"] == audit_id]
+            if contract_name:
+                result = [f for f in result if f["contract_name"] == contract_name]
+            result = sorted(result, key=lambda f: f["created_at"], reverse=True)
+            self._set_headers()
+            self.wfile.write(json.dumps(result).encode())
+            return
+
+        if path.startswith("/api/audit/false-positive/"):
+            feedback_id = path.split("/")[-1]
+            if feedback_id in false_positive_feedbacks:
+                self._set_headers()
+                self.wfile.write(json.dumps(false_positive_feedbacks[feedback_id]).encode())
+                return
+            self._set_headers(404)
+            self.wfile.write(json.dumps({"error": "Feedback not found"}).encode())
             return
 
         if path == "/api/audit":
@@ -716,6 +740,26 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(new_rule).encode())
             return
 
+        if path == "/api/audit/false-positive":
+            feedback_id = str(uuid.uuid4())[:8]
+            now = datetime.now().isoformat()
+            new_feedback = {
+                "id": feedback_id,
+                "audit_id": data.get("audit_id", ""),
+                "vulnerability_id": data.get("vulnerability_id", ""),
+                "vulnerability_name": data.get("vulnerability_name", ""),
+                "contract_name": data.get("contract_name", ""),
+                "reason": data.get("reason", ""),
+                "status": "pending",
+                "feedback_note": None,
+                "created_at": now,
+                "reviewed_at": None
+            }
+            false_positive_feedbacks[feedback_id] = new_feedback
+            self._set_headers()
+            self.wfile.write(json.dumps(new_feedback).encode())
+            return
+
         self._set_headers(404)
         self.wfile.write(json.dumps({"error": "Not found"}).encode())
 
@@ -747,6 +791,22 @@ class RequestHandler(BaseHTTPRequestHandler):
             custom_rules[rule_id] = updated_rule
             self._set_headers()
             self.wfile.write(json.dumps(updated_rule).encode())
+            return
+
+        if path.startswith("/api/audit/false-positive/") and path.endswith("/review"):
+            parts = path.split("/")
+            feedback_id = parts[-2]
+            if feedback_id not in false_positive_feedbacks:
+                self._set_headers(404)
+                self.wfile.write(json.dumps({"error": "Feedback not found"}).encode())
+                return
+            feedback = false_positive_feedbacks[feedback_id]
+            feedback["status"] = data.get("status", feedback["status"])
+            feedback["feedback_note"] = data.get("feedback_note", feedback.get("feedback_note"))
+            feedback["reviewed_at"] = datetime.now().isoformat()
+            false_positive_feedbacks[feedback_id] = feedback
+            self._set_headers()
+            self.wfile.write(json.dumps(feedback).encode())
             return
 
         self._set_headers(404)

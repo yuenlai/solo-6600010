@@ -48,6 +48,7 @@ interface AuditState {
   addFalsePositiveFeedback: (feedback: FalsePositiveFeedback) => void;
   submitFalsePositiveFeedback: (data: FalsePositiveFeedbackCreate) => Promise<FalsePositiveFeedback>;
   fetchFalsePositiveFeedbacks: (auditId?: string) => Promise<void>;
+  reviewFalsePositiveFeedback: (feedbackId: string, status: string, feedbackNote?: string) => Promise<FalsePositiveFeedback>;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -149,5 +150,17 @@ export const useAuditStore = create<AuditState>((set, get) => ({
     const res = await fetch(url);
     const feedbacks = await res.json();
     get().setFalsePositiveFeedbacks(feedbacks);
+  },
+  reviewFalsePositiveFeedback: async (feedbackId: string, status: string, feedbackNote?: string) => {
+    const res = await fetch(`/api/audit/false-positive/${feedbackId}/review`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, feedback_note: feedbackNote }),
+    });
+    const feedback = await res.json();
+    get().setFalsePositiveFeedbacks(
+      get().falsePositiveFeedbacks.map(f => f.id === feedbackId ? feedback : f)
+    );
+    return feedback;
   },
 }));
