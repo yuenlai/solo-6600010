@@ -482,6 +482,7 @@ custom_rules = {}
 audit_history = {}
 contract_version_counter = {}
 false_positive_feedbacks = {}
+audit_task_lists = {}
 
 def analyze_contract(source_code, contract_name):
     vulns = []
@@ -635,6 +636,31 @@ class RequestHandler(BaseHTTPRequestHandler):
             ]).encode())
             return
 
+        if path.startswith("/api/audit/task-lists"):
+            if path == "/api/audit/task-lists":
+                result = sorted(audit_task_lists.values(), key=lambda x: x.get("updated_at", ""), reverse=True)
+                self._set_headers()
+                self.wfile.write(json.dumps(result).encode())
+                return
+            path_parts = path.split("/")
+            if len(path_parts) >= 5 and path_parts[4]:
+                list_id = path_parts[4]
+                if len(path_parts) == 5:
+                    if list_id in audit_task_lists:
+                        self._set_headers()
+                        self.wfile.write(json.dumps(audit_task_lists[list_id]).encode())
+                        return
+                    self._set_headers(404)
+                    self.wfile.write(json.dumps({"error": "Task list not found"}).encode())
+                    return
+            if list_id in audit_task_lists:
+                self._set_headers()
+                self.wfile.write(json.dumps(audit_task_lists[list_id]).encode())
+                return
+            self._set_headers(404)
+            self.wfile.write(json.dumps({"error": "Task list not found"}).encode())
+            return
+
         if path.startswith("/api/audit/"):
             audit_id = path.split("/")[-1]
             if audit_id in audit_results:
@@ -770,6 +796,75 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(new_feedback).encode())
             return
 
+        if path == "/api/audit/task-lists":
+            list_id = str(uuid.uuid4())[:8]
+            now = datetime.now().isoformat()
+            task_list = {
+                "id": list_id,
+                "contract_name": data.get("contract_name", ""),
+                "contract_address": data.get("contract_address"),
+                "description": data.get("description"),
+                "tasks": [],
+                "created_at": now,
+                "updated_at": now
+            }
+            audit_task_lists[list_id] = task_list
+            self._set_headers()
+            self.wfile.write(json.dumps(task_list).encode())
+            return
+
+        post_parts = path.split("/")
+        if (len(post_parts) == 7 and post_parts[1] == "api" and post_parts[2] == "audit" and 
+            post_parts[3] == "task-lists" and post_parts[4] and post_parts[5] == "tasks" and post_parts[6] == ""):
+            list_id = post_parts[4]
+            if list_id not in audit_task_lists:
+                self._set_headers(404)
+                self.wfile.write(json.dumps({"error": "Task list not found"}).encode())
+                return
+            task_id = str(uuid.uuid4())[:8]
+            task_item = {
+                "id": task_id,
+                "title": data.get("title", ""),
+                "description": data.get("description"),
+                "status": "pending",
+                "priority": data.get("priority", "medium"),
+                "assignee": data.get("assignee"),
+                "due_date": data.get("due_date"),
+                "completed_at": None,
+                "notes": None
+            }
+            task_list = audit_task_lists[list_id]
+            task_list["tasks"].append(task_item)
+            task_list["updated_at"] = datetime.now().isoformat()
+            self._set_headers()
+            self.wfile.write(json.dumps(task_item).encode())
+            return
+        if (len(post_parts) == 6 and post_parts[1] == "api" and post_parts[2] == "audit" and 
+            post_parts[3] == "task-lists" and post_parts[4] and post_parts[5] == "tasks"):
+            list_id = post_parts[4]
+            if list_id not in audit_task_lists:
+                self._set_headers(404)
+                self.wfile.write(json.dumps({"error": "Task list not found"}).encode())
+                return
+            task_id = str(uuid.uuid4())[:8]
+            task_item = {
+                "id": task_id,
+                "title": data.get("title", ""),
+                "description": data.get("description"),
+                "status": "pending",
+                "priority": data.get("priority", "medium"),
+                "assignee": data.get("assignee"),
+                "due_date": data.get("due_date"),
+                "completed_at": None,
+                "notes": None
+            }
+            task_list = audit_task_lists[list_id]
+            task_list["tasks"].append(task_item)
+            task_list["updated_at"] = datetime.now().isoformat()
+            self._set_headers()
+            self.wfile.write(json.dumps(task_item).encode())
+            return
+
         self._set_headers(404)
         self.wfile.write(json.dumps({"error": "Not found"}).encode())
 
@@ -804,8 +899,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
 
         put_parts = path.split("/")
-        if (len(put_parts) == 7 and put_parts[1] == "api" and put_parts[2] == "audit" and 
-            put_parts[3] == "false-positive" and put_parts[4] and put_parts[5] == "review" and put_parts[6] == ""):
+        if (len(put_parts) >= 6 and put_parts[1] == "api" and put_parts[2] == "audit" and 
+            put_parts[3] == "false-positive" and put_parts[4] and "review" in put_parts):
             feedback_id = put_parts[4]
             if feedback_id not in false_positive_feedbacks:
                 self._set_headers(404)
@@ -819,20 +914,59 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._set_headers()
             self.wfile.write(json.dumps(feedback).encode())
             return
-        if (len(put_parts) == 6 and put_parts[1] == "api" and put_parts[2] == "audit" and 
-            put_parts[3] == "false-positive" and put_parts[4] and put_parts[5] == "review"):
-            feedback_id = put_parts[4]
-            if feedback_id not in false_positive_feedbacks:
+
+        if (len(put_parts) == 5 and put_parts[1] == "api" and put_parts[2] == "audit" and 
+            put_parts[3] == "task-lists" and put_parts[4]):
+            list_id = put_parts[4]
+            if list_id not in audit_task_lists:
                 self._set_headers(404)
-                self.wfile.write(json.dumps({"error": "Feedback not found"}).encode())
+                self.wfile.write(json.dumps({"error": "Task list not found"}).encode())
                 return
-            feedback = false_positive_feedbacks[feedback_id]
-            feedback["status"] = data.get("status", feedback["status"])
-            feedback["feedback_note"] = data.get("feedback_note", feedback.get("feedback_note"))
-            feedback["reviewed_at"] = datetime.now().isoformat()
-            false_positive_feedbacks[feedback_id] = feedback
+            task_list = audit_task_lists[list_id]
+            task_list["contract_name"] = data.get("contract_name", task_list["contract_name"])
+            task_list["contract_address"] = data.get("contract_address", task_list.get("contract_address"))
+            task_list["description"] = data.get("description", task_list.get("description"))
+            task_list["updated_at"] = datetime.now().isoformat()
             self._set_headers()
-            self.wfile.write(json.dumps(feedback).encode())
+            self.wfile.write(json.dumps(task_list).encode())
+            return
+
+        if (len(put_parts) == 7 and put_parts[1] == "api" and put_parts[2] == "audit" and 
+            put_parts[3] == "task-lists" and put_parts[4] and put_parts[5] == "tasks" and put_parts[6]):
+            list_id = put_parts[4]
+            task_id = put_parts[6]
+            if list_id not in audit_task_lists:
+                self._set_headers(404)
+                self.wfile.write(json.dumps({"error": "Task list not found"}).encode())
+                return
+            task_list = audit_task_lists[list_id]
+            task_index = next((i for i, t in enumerate(task_list["tasks"]) if t["id"] == task_id), -1)
+            if task_index == -1:
+                self._set_headers(404)
+                self.wfile.write(json.dumps({"error": "Task item not found"}).encode())
+                return
+            task = task_list["tasks"][task_index]
+            if "title" in data:
+                task["title"] = data["title"]
+            if "description" in data:
+                task["description"] = data["description"]
+            if "status" in data:
+                task["status"] = data["status"]
+                if data["status"] == "completed":
+                    task["completed_at"] = datetime.now().isoformat()
+                else:
+                    task["completed_at"] = None
+            if "priority" in data:
+                task["priority"] = data["priority"]
+            if "assignee" in data:
+                task["assignee"] = data["assignee"]
+            if "due_date" in data:
+                task["due_date"] = data["due_date"]
+            if "notes" in data:
+                task["notes"] = data["notes"]
+            task_list["updated_at"] = datetime.now().isoformat()
+            self._set_headers()
+            self.wfile.write(json.dumps(task).encode())
             return
 
         self._set_headers(404)
@@ -851,6 +985,34 @@ class RequestHandler(BaseHTTPRequestHandler):
             del custom_rules[rule_id]
             self._set_headers()
             self.wfile.write(json.dumps({"message": "Rule deleted"}).encode())
+            return
+
+        del_parts = path.split("/")
+        if (len(del_parts) == 5 and del_parts[1] == "api" and del_parts[2] == "audit" and 
+            del_parts[3] == "task-lists" and del_parts[4]):
+            list_id = del_parts[4]
+            if list_id not in audit_task_lists:
+                self._set_headers(404)
+                self.wfile.write(json.dumps({"error": "Task list not found"}).encode())
+                return
+            del audit_task_lists[list_id]
+            self._set_headers()
+            self.wfile.write(json.dumps({"message": "Task list deleted"}).encode())
+            return
+
+        if (len(del_parts) == 7 and del_parts[1] == "api" and del_parts[2] == "audit" and 
+            del_parts[3] == "task-lists" and del_parts[4] and del_parts[5] == "tasks" and del_parts[6]):
+            list_id = del_parts[4]
+            task_id = del_parts[6]
+            if list_id not in audit_task_lists:
+                self._set_headers(404)
+                self.wfile.write(json.dumps({"error": "Task list not found"}).encode())
+                return
+            task_list = audit_task_lists[list_id]
+            task_list["tasks"] = [t for t in task_list["tasks"] if t["id"] != task_id]
+            task_list["updated_at"] = datetime.now().isoformat()
+            self._set_headers()
+            self.wfile.write(json.dumps({"message": "Task item deleted"}).encode())
             return
 
         self._set_headers(404)
