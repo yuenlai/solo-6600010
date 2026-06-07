@@ -7,6 +7,7 @@ contract_version_counter = {}
 false_positive_feedbacks = {}
 audit_task_lists = {}
 remediation_plans = {}
+audit_reports = {}
 
 __all__ = [
     'audit_results',
@@ -17,5 +18,6 @@ __all__ = [
     'contract_version_counter',
     'false_positive_feedbacks',
     'audit_task_lists',
-    'remediation_plans'
+    'remediation_plans',
+    'audit_reports'
 ]

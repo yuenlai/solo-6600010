@@ -18,14 +18,16 @@ from ..models.contract import (
     RiskDistribution, ProjectContractSummary, CriticalIssue, RecentActivity,
     ProjectDashboardData, Severity,
     RemediationPlan, RemediationPlanCreate, RemediationItem, RemediationItemUpdate,
-    RemediationStatus
+    RemediationStatus,
+    ReportIssue, ReportConclusion, ReportRemediationItem, ReportRemediationSummary,
+    AuditReport, AuditReportExportRequest
 )
 try:
     from ..services.analyzer import analyze_contract, analyze_batch
 except ImportError:
     analyze_contract = None
     analyze_batch = None
-from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists, remediation_plans
+from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists, remediation_plans, audit_reports
 
 class DummyRouter:
     def post(self, path):
@@ -1136,3 +1138,388 @@ async def update_remediation_item(
     remediation_plans[plan_id] = plan
     
     return item
+
+def get_risk_level(score: float) -> str:
+    if score >= 80:
+        return "低风险"
+    elif score >= 60:
+        return "中风险"
+    elif score >= 40:
+        return "高风险"
+    else:
+        return "极高风险"
+
+def get_estimated_effort(severity: Severity) -> str:
+    if severity == Severity.critical:
+        return "高（2-4周）"
+    elif severity == Severity.high:
+        return "中（1-2周）"
+    elif severity == Severity.medium:
+        return "低（3-5天）"
+    else:
+        return "极低（1-2天）"
+
+def generate_report_conclusion(
+    score: float, 
+    vulnerabilities: list, 
+    total_contracts: int = 1,
+    batch_interpretation = None
+) -> ReportConclusion:
+    dist = calculate_risk_distribution(vulnerabilities)
+    risk_level = get_risk_level(score)
+    
+    key_findings = []
+    if dist.critical > 0:
+        key_findings.append(f"发现 {dist.critical} 个严重级别漏洞，需立即处理")
+    if dist.high > 0:
+        key_findings.append(f"发现 {dist.high} 个高级别漏洞，建议优先修复")
+    if dist.medium > 0:
+        key_findings.append(f"发现 {dist.medium} 个中级别漏洞，建议规划修复")
+    
+    if total_contracts > 1:
+        summary = f"本次共审计 {total_contracts} 份合约，平均安全分为 {score} 分，整体风险等级为【{risk_level}】。"
+    else:
+        summary = f"本次审计的合约安全评分为 {score} 分，风险等级为【{risk_level}】。"
+    
+    if dist.critical > 0 or dist.high > 0:
+        summary += f" 存在 {dist.critical + dist.high} 个高危漏洞，建议尽快制定整改计划。"
+    else:
+        summary += " 未发现高危漏洞，整体安全性良好。"
+    
+    if batch_interpretation and hasattr(batch_interpretation, 'overall_conclusion'):
+        summary = batch_interpretation.overall_conclusion
+        if hasattr(batch_interpretation, 'key_findings'):
+            key_findings = batch_interpretation.key_findings + key_findings
+    
+    risk_dist = {
+        'critical': dist.critical,
+        'high': dist.high,
+        'medium': dist.medium,
+        'low': dist.low,
+        'info': dist.info
+    }
+    
+    return ReportConclusion(
+        overall_score=score,
+        risk_level=risk_level,
+        summary=summary,
+        key_findings=key_findings[:5],
+        total_contracts=total_contracts,
+        total_vulnerabilities=len(vulnerabilities),
+        risk_distribution=risk_dist
+    )
+
+def generate_report_issues(
+    audit_results_list: list,
+    common_issues: list | None = None
+) -> list[ReportIssue]:
+    issues = []
+    
+    if common_issues:
+        for issue in common_issues:
+            sev = issue.severity.value if hasattr(issue.severity, 'value') else str(issue.severity)
+            report_issue = ReportIssue(
+                id=str(uuid.uuid4())[:8],
+                name=issue.name,
+                severity=Severity(sev),
+                contract_name="多个合约",
+                line_number=0,
+                description=issue.description,
+                recommendation=issue.recommendation,
+                affected_contracts=issue.affected_contracts,
+                occurrence_count=issue.count
+            )
+            issues.append(report_issue)
+    
+    for result in audit_results_list:
+        for vuln in result.vulnerabilities:
+            sev = vuln.severity.value if hasattr(vuln.severity, 'value') else str(vuln.severity)
+            report_issue = ReportIssue(
+                id=vuln.id,
+                name=vuln.name,
+                severity=Severity(sev),
+                contract_name=result.contract_name,
+                line_number=vuln.line,
+                description=vuln.description,
+                recommendation=vuln.recommendation,
+                affected_contracts=[result.contract_name],
+                occurrence_count=1
+            )
+            issues.append(report_issue)
+    
+    issues.sort(key=lambda x: (
+        0 if x.severity == Severity.critical else 1 if x.severity == Severity.high else 2 if x.severity == Severity.medium else 3,
+        x.contract_name
+    ))
+    
+    return issues
+
+def generate_remediation_summary(issues: list[ReportIssue]) -> ReportRemediationSummary:
+    critical_count = sum(1 for i in issues if i.severity == Severity.critical)
+    high_count = sum(1 for i in issues if i.severity == Severity.high)
+    medium_count = sum(1 for i in issues if i.severity == Severity.medium)
+    low_count = sum(1 for i in issues if i.severity in [Severity.low, Severity.info])
+    
+    priority_items = []
+    for issue in issues:
+        if issue.severity in [Severity.critical, Severity.high]:
+            priority = "紧急" if issue.severity == Severity.critical else "高优先级"
+            item = ReportRemediationItem(
+                priority=priority,
+                vulnerability_name=issue.name,
+                contract_name=issue.contract_name,
+                severity=issue.severity,
+                recommendation=issue.recommendation,
+                estimated_effort=get_estimated_effort(issue.severity)
+            )
+            priority_items.append(item)
+            if len(priority_items) >= 10:
+                break
+    
+    next_steps = []
+    if critical_count > 0:
+        next_steps.append("立即组织安全团队评估严重漏洞的影响范围")
+        next_steps.append("制定紧急修复方案，优先修复严重级别漏洞")
+    if high_count > 0:
+        next_steps.append("为高级别漏洞制定详细的整改计划")
+    if medium_count > 0:
+        next_steps.append("将中级别漏洞纳入下一轮迭代修复计划")
+    next_steps.append("修复完成后进行回归测试和二次审计")
+    next_steps.append("建立定期安全审计机制，预防类似问题复发")
+    
+    return ReportRemediationSummary(
+        total_items=len(issues),
+        critical_count=critical_count,
+        high_count=high_count,
+        medium_count=medium_count,
+        low_count=low_count,
+        priority_items=priority_items,
+        next_steps=next_steps
+    )
+
+def generate_audit_report(
+    audit_id: str | None = None,
+    batch_audit_id: str | None = None,
+    include_remediation: bool = True
+) -> AuditReport:
+    audit_results_list = []
+    common_issues = []
+    report_type = "single"
+    title = ""
+    avg_score = 0
+    
+    if audit_id and audit_id in audit_results:
+        result = audit_results[audit_id]
+        audit_results_list = [result]
+        report_type = "single"
+        title = f"智能合约安全审计报告 - {result.contract_name}"
+        avg_score = result.score
+    elif batch_audit_id and batch_audit_id in batch_audit_results:
+        batch_result = batch_audit_results[batch_audit_id]
+        audit_results_list = batch_result.results
+        common_issues = batch_result.common_issues
+        report_type = "batch"
+        contract_names = [r.contract_name for r in batch_result.results]
+        if len(contract_names) <= 3:
+            title = f"智能合约安全审计报告 - {', '.join(contract_names)}"
+        else:
+            title = f"智能合约安全审计报告 - {len(contract_names)}份合约批量审计"
+        avg_score = batch_result.average_score
+    else:
+        raise HTTPException(404, "Audit not found")
+    
+    all_vulnerabilities = []
+    for r in audit_results_list:
+        all_vulnerabilities.extend(r.vulnerabilities)
+    
+    batch_interpretation = None
+    if batch_audit_id and batch_audit_id in batch_audit_results:
+        batch_interpretation = batch_audit_results[batch_audit_id].score_interpretation
+    
+    conclusion = generate_report_conclusion(
+        avg_score, 
+        all_vulnerabilities, 
+        total_contracts=len(audit_results_list),
+        batch_interpretation=batch_interpretation
+    )
+    
+    issues = generate_report_issues(audit_results_list, common_issues)
+    
+    remediation_summary = generate_remediation_summary(issues) if include_remediation else ReportRemediationSummary(
+        total_items=0, critical_count=0, high_count=0, medium_count=0, low_count=0,
+        priority_items=[], next_steps=[]
+    )
+    
+    report_id = str(uuid.uuid4())[:8]
+    report = AuditReport(
+        id=report_id,
+        report_type=report_type,
+        title=title,
+        generated_at=datetime.now().isoformat(),
+        conclusion=conclusion,
+        issues=issues,
+        remediation_summary=remediation_summary
+    )
+    
+    audit_reports[report_id] = report
+    return report
+
+def generate_markdown_report(report: AuditReport) -> str:
+    md = []
+    md.append(f"# {report.title}")
+    md.append("")
+    md.append(f"**生成时间：** {report.generated_at}")
+    md.append(f"**报告类型：** {'批量审计' if report.report_type == 'batch' else '单合约审计'}")
+    md.append("")
+    
+    md.append("## 一、审计结论")
+    md.append("")
+    md.append(f"**安全评分：** {report.conclusion.overall_score} / 100")
+    md.append(f"**风险等级：** {report.conclusion.risk_level}")
+    md.append(f"**审计合约数量：** {report.conclusion.total_contracts} 份")
+    md.append(f"**发现问题总数：** {report.conclusion.total_vulnerabilities} 个")
+    md.append("")
+    
+    md.append("### 风险分布")
+    md.append("")
+    md.append("| 严重级别 | 数量 |")
+    md.append("|----------|------|")
+    for sev, count in report.conclusion.risk_distribution.items():
+        md.append(f"| {sev} | {count} |")
+    md.append("")
+    
+    md.append("### 总结")
+    md.append("")
+    md.append(report.conclusion.summary)
+    md.append("")
+    
+    if report.conclusion.key_findings:
+        md.append("### 关键发现")
+        md.append("")
+        for finding in report.conclusion.key_findings:
+            md.append(f"- {finding}")
+        md.append("")
+    
+    md.append("## 二、问题详细列表")
+    md.append("")
+    
+    current_severity = None
+    for issue in report.issues:
+        sev_label = issue.severity.value if hasattr(issue.severity, 'value') else str(issue.severity)
+        sev_upper = sev_label.upper()
+        if sev_upper != current_severity:
+            current_severity = sev_upper
+            md.append(f"### {sev_upper} 级别")
+            md.append("")
+        
+        md.append(f"#### {issue.name}")
+        md.append("")
+        md.append(f"- **合约：** {issue.contract_name}")
+        if issue.line_number > 0:
+            md.append(f"- **位置：** 第 {issue.line_number} 行")
+        if issue.occurrence_count and issue.occurrence_count > 1:
+            md.append(f"- **出现次数：** {issue.occurrence_count} 次")
+        if issue.affected_contracts and len(issue.affected_contracts) > 1:
+            md.append(f"- **影响合约：** {', '.join(issue.affected_contracts)}")
+        md.append("")
+        md.append("**问题描述：**")
+        md.append(issue.description)
+        md.append("")
+        md.append("**修复建议：**")
+        md.append(issue.recommendation)
+        md.append("")
+    
+    if report.remediation_summary and report.remediation_summary.total_items > 0:
+        md.append("## 三、整改摘要")
+        md.append("")
+        
+        md.append("### 整改概览")
+        md.append("")
+        md.append(f"- **整改项总数：** {report.remediation_summary.total_items}")
+        md.append(f"- **严重级别：** {report.remediation_summary.critical_count} 个")
+        md.append(f"- **高级别：** {report.remediation_summary.high_count} 个")
+        md.append(f"- **中级别：** {report.remediation_summary.medium_count} 个")
+        md.append(f"- **低级别：** {report.remediation_summary.low_count} 个")
+        md.append("")
+        
+        if report.remediation_summary.priority_items:
+            md.append("### 重点整改项")
+            md.append("")
+            md.append("| 优先级 | 漏洞名称 | 合约 | 严重级别 | 预计工作量 |")
+            md.append("|--------|----------|------|----------|------------|")
+            for item in report.remediation_summary.priority_items:
+                sev = item.severity.value if hasattr(item.severity, 'value') else str(item.severity)
+                md.append(f"| {item.priority} | {item.vulnerability_name} | {item.contract_name} | {sev} | {item.estimated_effort} |")
+            md.append("")
+            
+            md.append("### 整改建议详情")
+            md.append("")
+            for i, item in enumerate(report.remediation_summary.priority_items, 1):
+                md.append(f"**{i}. {item.vulnerability_name}**")
+                md.append("")
+                md.append(f"- 优先级：{item.priority}")
+                md.append(f"- 合约：{item.contract_name}")
+                md.append(f"- 预计工作量：{item.estimated_effort}")
+                md.append(f"- 建议：{item.recommendation}")
+                md.append("")
+        
+        if report.remediation_summary.next_steps:
+            md.append("### 后续步骤")
+            md.append("")
+            for step in report.remediation_summary.next_steps:
+                md.append(f"1. {step}")
+            md.append("")
+    
+    md.append("---")
+    md.append("*本报告由智能合约安全审计系统自动生成*")
+    
+    return "\n".join(md)
+
+@router.post("/report/generate")
+async def generate_report(req: AuditReportExportRequest) -> AuditReport:
+    return generate_audit_report(
+        audit_id=req.audit_id,
+        batch_audit_id=req.batch_audit_id,
+        include_remediation=req.include_remediation
+    )
+
+@router.post("/report/export")
+async def export_report(req: AuditReportExportRequest):
+    from fastapi.responses import Response
+    import io
+    
+    report = generate_audit_report(
+        audit_id=req.audit_id,
+        batch_audit_id=req.batch_audit_id,
+        include_remediation=req.include_remediation
+    )
+    
+    if req.format == "markdown":
+        content = generate_markdown_report(report)
+        filename = f"audit_report_{report.id}.md"
+        media_type = "text/markdown"
+    elif req.format == "json":
+        import json
+        content = json.dumps(report.model_dump(), ensure_ascii=False, indent=2)
+        filename = f"audit_report_{report.id}.json"
+        media_type = "application/json"
+    else:
+        raise HTTPException(400, "Unsupported format. Use 'markdown' or 'json'.")
+    
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+@router.get("/report/{report_id}")
+async def get_report(report_id: str) -> AuditReport:
+    if report_id not in audit_reports:
+        raise HTTPException(404, "Report not found")
+    return audit_reports[report_id]
+
+@router.get("/reports")
+async def list_reports() -> list[AuditReport]:
+    return sorted(audit_reports.values(), key=lambda r: r.generated_at, reverse=True)

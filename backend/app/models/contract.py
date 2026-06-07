@@ -257,16 +257,75 @@ if _HAS_PYDANTIC:
         notes: str | None = None
         due_date: str | None = None
         recheck_notes: str | None = None
+
+    class ReportIssue(BaseModel):
+        id: str
+        name: str
+        severity: Severity
+        contract_name: str
+        line_number: int
+        description: str
+        recommendation: str
+        affected_contracts: list[str] | None = None
+        occurrence_count: int | None = None
+
+    class ReportConclusion(BaseModel):
+        overall_score: float
+        risk_level: str
+        summary: str
+        key_findings: list[str]
+        total_contracts: int
+        total_vulnerabilities: int
+        risk_distribution: dict[str, int]
+
+    class ReportRemediationItem(BaseModel):
+        priority: str
+        vulnerability_name: str
+        contract_name: str
+        severity: Severity
+        recommendation: str
+        estimated_effort: str
+
+    class ReportRemediationSummary(BaseModel):
+        total_items: int
+        critical_count: int
+        high_count: int
+        medium_count: int
+        low_count: int
+        priority_items: list[ReportRemediationItem]
+        next_steps: list[str]
+
+    class AuditReport(BaseModel):
+        id: str
+        report_type: str
+        title: str
+        generated_at: str
+        conclusion: ReportConclusion
+        issues: list[ReportIssue]
+        remediation_summary: ReportRemediationSummary
+
+    class AuditReportExportRequest(BaseModel):
+        audit_id: str | None = None
+        batch_audit_id: str | None = None
+        format: str = "markdown"
+        include_remediation: bool = True
+
 else:
     class Vulnerability:
         pass
     class AuditRequest:
+        pass
+    class ScoreBreakdown:
+        pass
+    class ScoreInterpretation:
         pass
     class AuditResult:
         pass
     class BatchAuditRequest:
         pass
     class CommonIssue:
+        pass
+    class BatchScoreInterpretation:
         pass
     class BatchAuditResult:
         pass
@@ -315,4 +374,32 @@ else:
     class RecentActivity:
         pass
     class ProjectDashboardData:
+        pass
+    class RemediationStatus(str, Enum):
+        open = "open"
+        in_progress = "in_progress"
+        resolved = "resolved"
+        recheck_pending = "recheck_pending"
+        recheck_passed = "recheck_passed"
+        recheck_failed = "recheck_failed"
+        ignored = "ignored"
+    class RemediationItem:
+        pass
+    class RemediationPlan:
+        pass
+    class RemediationPlanCreate:
+        pass
+    class RemediationItemUpdate:
+        pass
+    class ReportIssue:
+        pass
+    class ReportConclusion:
+        pass
+    class ReportRemediationItem:
+        pass
+    class ReportRemediationSummary:
+        pass
+    class AuditReport:
+        pass
+    class AuditReportExportRequest:
         pass

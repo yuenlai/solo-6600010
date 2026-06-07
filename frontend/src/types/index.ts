@@ -269,3 +269,61 @@ export interface RemediationItemUpdate {
   due_date?: string;
   recheck_notes?: string;
 }
+
+export interface ReportIssue {
+  id: string;
+  name: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  contract_name: string;
+  line_number: number;
+  description: string;
+  recommendation: string;
+  affected_contracts?: string[];
+  occurrence_count?: number;
+}
+
+export interface ReportConclusion {
+  overall_score: number;
+  risk_level: string;
+  summary: string;
+  key_findings: string[];
+  total_contracts: number;
+  total_vulnerabilities: number;
+  risk_distribution: Record<string, number>;
+}
+
+export interface ReportRemediationItem {
+  priority: string;
+  vulnerability_name: string;
+  contract_name: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  recommendation: string;
+  estimated_effort: string;
+}
+
+export interface ReportRemediationSummary {
+  total_items: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  priority_items: ReportRemediationItem[];
+  next_steps: string[];
+}
+
+export interface AuditReport {
+  id: string;
+  report_type: "single" | "batch";
+  title: string;
+  generated_at: string;
+  conclusion: ReportConclusion;
+  issues: ReportIssue[];
+  remediation_summary: ReportRemediationSummary;
+}
+
+export interface AuditReportExportRequest {
+  audit_id?: string;
+  batch_audit_id?: string;
+  format?: "markdown" | "json";
+  include_remediation?: boolean;
+}

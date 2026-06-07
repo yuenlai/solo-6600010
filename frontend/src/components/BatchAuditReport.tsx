@@ -16,12 +16,14 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export const BatchAuditReport: React.FC = () => {
-  const { batchResult, submitFalsePositiveFeedback, falsePositiveFeedbacks, fetchFalsePositiveFeedbacks, createRemediationPlan, setShowRemediationPlan, setSelectedRemediationPlan } = useAuditStore();
+  const { batchResult, submitFalsePositiveFeedback, falsePositiveFeedbacks, fetchFalsePositiveFeedbacks, createRemediationPlan, setShowRemediationPlan, setSelectedRemediationPlan, exportAuditReport, isExportingReport } = useAuditStore();
   const [view, setView] = useState<'ranking' | 'common'>('ranking');
   const [selectedContract, setSelectedContract] = useState<AuditResult | null>(null);
   const [showFeedbackForm, setShowFeedbackForm] = useState<string | null>(null);
   const [feedbackReason, setFeedbackReason] = useState('');
   const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showSingleExportMenu, setShowSingleExportMenu] = useState(false);
 
   useEffect(() => {
     if (selectedContract) {
@@ -83,6 +85,26 @@ export const BatchAuditReport: React.FC = () => {
     }
   };
 
+  const handleExportBatch = async (format: 'markdown' | 'json') => {
+    if (!batchResult) return;
+    setShowExportMenu(false);
+    await exportAuditReport({
+      batch_audit_id: batchResult.id,
+      format,
+      include_remediation: true
+    });
+  };
+
+  const handleExportSingle = async (format: 'markdown' | 'json') => {
+    if (!selectedContract) return;
+    setShowSingleExportMenu(false);
+    await exportAuditReport({
+      audit_id: selectedContract.id,
+      format,
+      include_remediation: true
+    });
+  };
+
   if (selectedContract) {
     return (
       <div style={{ width: '500px', padding: '20px', overflow: 'auto', borderLeft: '1px solid #e0e0e0' }}>
@@ -97,25 +119,94 @@ export const BatchAuditReport: React.FC = () => {
             <div style={{ fontSize: '12px', color: '#888' }}>{selectedContract.vulnerabilities.length} 个问题 · {selectedContract.total_lines} 行</div>
           </div>
         </div>
-        <button
-          onClick={handleGenerateSingleRemediationPlan}
-          disabled={generatingPlan}
-          style={{
-            width: '100%',
-            padding: '10px 16px',
-            border: 'none',
-            borderRadius: '6px',
-            background: '#4caf50',
-            color: '#fff',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 500,
-            marginBottom: '16px',
-            opacity: generatingPlan ? 0.6 : 1
-          }}
-        >
-          {generatingPlan ? '生成中...' : '📋 生成该合约整改计划'}
-        </button>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+          <button
+            onClick={handleGenerateSingleRemediationPlan}
+            disabled={generatingPlan}
+            style={{
+              flex: 1,
+              padding: '10px 16px',
+              border: 'none',
+              borderRadius: '6px',
+              background: '#4caf50',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 500,
+              opacity: generatingPlan ? 0.6 : 1
+            }}
+          >
+            {generatingPlan ? '生成中...' : '📋 整改计划'}
+          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowSingleExportMenu(!showSingleExportMenu)}
+              disabled={isExportingReport}
+              style={{
+                padding: '10px 16px',
+                border: 'none',
+                borderRadius: '6px',
+                background: '#1976d2',
+                color: '#fff',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 500,
+                opacity: isExportingReport ? 0.6 : 1
+              }}
+            >
+              {isExportingReport ? '导出中...' : '📄 导出'}
+            </button>
+            {showSingleExportMenu && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: '4px',
+                background: '#fff',
+                border: '1px solid #ddd',
+                borderRadius: '6px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                zIndex: 100,
+                minWidth: '140px'
+              }}>
+                <button
+                  onClick={() => handleExportSingle('markdown')}
+                  style={{
+                    width: '100%',
+                    padding: '10px 16px',
+                    border: 'none',
+                    background: 'transparent',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    borderRadius: '6px',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  📝 Markdown 格式
+                </button>
+                <button
+                  onClick={() => handleExportSingle('json')}
+                  style={{
+                    width: '100%',
+                    padding: '10px 16px',
+                    border: 'none',
+                    background: 'transparent',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    borderRadius: '6px',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  📊 JSON 格式
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
         {selectedContract.score_interpretation && (
           <ScoreInterpretation interpretation={selectedContract.score_interpretation} />
         )}
@@ -201,24 +292,94 @@ export const BatchAuditReport: React.FC = () => {
           <div><div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ff9800' }}>{batchResult.total_vulnerabilities}</div><div style={{ fontSize: '12px', color: '#666' }}>问题总数</div></div>
           <div><div style={{ fontSize: '24px', fontWeight: 'bold', color: batchResult.average_score >= 80 ? '#2e7d32' : batchResult.average_score >= 50 ? '#e65100' : '#b71c1c' }}>{batchResult.average_score}</div><div style={{ fontSize: '12px', color: '#666' }}>平均分</div></div>
         </div>
-        <button
-          onClick={handleGenerateRemediationPlan}
-          disabled={generatingPlan}
-          style={{
-            width: '100%',
-            padding: '10px 16px',
-            border: 'none',
-            borderRadius: '6px',
-            background: '#4caf50',
-            color: '#fff',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 500,
-            opacity: generatingPlan ? 0.6 : 1
-          }}
-        >
-          {generatingPlan ? '生成中...' : '📋 生成全部合约整改计划'}
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={handleGenerateRemediationPlan}
+            disabled={generatingPlan}
+            style={{
+              flex: 1,
+              padding: '10px 16px',
+              border: 'none',
+              borderRadius: '6px',
+              background: '#4caf50',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 500,
+              opacity: generatingPlan ? 0.6 : 1
+            }}
+          >
+            {generatingPlan ? '生成中...' : '📋 整改计划'}
+          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              disabled={isExportingReport}
+              style={{
+                padding: '10px 16px',
+                border: 'none',
+                borderRadius: '6px',
+                background: '#1976d2',
+                color: '#fff',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 500,
+                opacity: isExportingReport ? 0.6 : 1
+              }}
+            >
+              {isExportingReport ? '导出中...' : '📄 导出报告'}
+            </button>
+            {showExportMenu && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: '4px',
+                background: '#fff',
+                border: '1px solid #ddd',
+                borderRadius: '6px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                zIndex: 100,
+                minWidth: '140px'
+              }}>
+                <button
+                  onClick={() => handleExportBatch('markdown')}
+                  style={{
+                    width: '100%',
+                    padding: '10px 16px',
+                    border: 'none',
+                    background: 'transparent',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    borderRadius: '6px',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  📝 Markdown 格式
+                </button>
+                <button
+                  onClick={() => handleExportBatch('json')}
+                  style={{
+                    width: '100%',
+                    padding: '10px 16px',
+                    border: 'none',
+                    background: 'transparent',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    borderRadius: '6px',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  📊 JSON 格式
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {batchResult.score_interpretation && (

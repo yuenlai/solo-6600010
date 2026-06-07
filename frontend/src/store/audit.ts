@@ -5,7 +5,8 @@ import {
   ContractTemplate, FalsePositiveFeedback, FalsePositiveFeedbackCreate,
   AuditTaskList, AuditTaskListCreate, AuditTaskItem, AuditTaskItemCreate,
   AuditTaskItemUpdate, ProjectDashboardData,
-  RemediationPlan, RemediationPlanCreate, RemediationItem, RemediationItemUpdate
+  RemediationPlan, RemediationPlanCreate, RemediationItem, RemediationItemUpdate,
+  AuditReport, AuditReportExportRequest
 } from '../types';
 
 interface AuditState {
@@ -80,6 +81,16 @@ interface AuditState {
   createRemediationPlan: (data: RemediationPlanCreate) => Promise<RemediationPlan>;
   deleteRemediationPlan: (planId: string) => Promise<void>;
   updateRemediationItem: (planId: string, itemId: string, data: RemediationItemUpdate) => Promise<RemediationItem>;
+  auditReports: AuditReport[];
+  selectedAuditReport: AuditReport | null;
+  isExportingReport: boolean;
+  setAuditReports: (reports: AuditReport[]) => void;
+  setSelectedAuditReport: (report: AuditReport | null) => void;
+  setIsExportingReport: (value: boolean) => void;
+  generateAuditReport: (data: AuditReportExportRequest) => Promise<AuditReport>;
+  exportAuditReport: (data: AuditReportExportRequest) => Promise<void>;
+  fetchAuditReports: () => Promise<void>;
+  fetchAuditReport: (reportId: string) => Promise<void>;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -151,6 +162,9 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   showRemediationPlan: false,
   remediationPlans: [],
   selectedRemediationPlan: null,
+  auditReports: [],
+  selectedAuditReport: null,
+  isExportingReport: false,
   setMode: (m) => set({ mode: m, result: null, batchResult: null }),
   setSourceCode: (code) => set({ sourceCode: code }),
   setResult: (r) => set({ result: r }),
@@ -351,5 +365,63 @@ export const useAuditStore = create<AuditState>((set, get) => ({
       }
     }
     return item;
+  },
+  setAuditReports: (reports) => set({ auditReports: reports }),
+  setSelectedAuditReport: (report) => set({ selectedAuditReport: report }),
+  setIsExportingReport: (value) => set({ isExportingReport: value }),
+  generateAuditReport: async (data) => {
+    const res = await fetch('/api/audit/report/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const report = await res.json();
+    get().setSelectedAuditReport(report);
+    get().setAuditReports([report, ...get().auditReports]);
+    return report;
+  },
+  exportAuditReport: async (data) => {
+    get().setIsExportingReport(true);
+    try {
+      const res = await fetch('/api/audit/report/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const filename = res.headers.get('Content-Disposition')?.match(/filename="?([^"]+)"?/)?.[1] || 'audit_report.md';
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } finally {
+      get().setIsExportingReport(false);
+    }
+  },
+  fetchAuditReports: async () => {
+    try {
+      const res = await fetch('/api/audit/reports');
+      if (res.ok) {
+        const reports = await res.json();
+        get().setAuditReports(reports);
+      }
+    } catch (e) {
+      console.error('Failed to fetch audit reports:', e);
+    }
+  },
+  fetchAuditReport: async (reportId) => {
+    try {
+      const res = await fetch(`/api/audit/report/${reportId}`);
+      if (res.ok) {
+        const report = await res.json();
+        get().setSelectedAuditReport(report);
+      }
+    } catch (e) {
+      console.error('Failed to fetch audit report:', e);
+    }
   },
 }));

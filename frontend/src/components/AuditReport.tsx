@@ -16,10 +16,11 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export const AuditReport: React.FC = () => {
-  const { result, submitFalsePositiveFeedback, falsePositiveFeedbacks, fetchFalsePositiveFeedbacks, createRemediationPlan, setShowRemediationPlan, setSelectedRemediationPlan } = useAuditStore();
+  const { result, submitFalsePositiveFeedback, falsePositiveFeedbacks, fetchFalsePositiveFeedbacks, createRemediationPlan, setShowRemediationPlan, setSelectedRemediationPlan, exportAuditReport, isExportingReport } = useAuditStore();
   const [showFeedbackForm, setShowFeedbackForm] = useState<string | null>(null);
   const [feedbackReason, setFeedbackReason] = useState('');
   const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   useEffect(() => {
     if (result) {
@@ -61,6 +62,16 @@ export const AuditReport: React.FC = () => {
     }
   };
 
+  const handleExport = async (format: 'markdown' | 'json') => {
+    if (!result) return;
+    setShowExportMenu(false);
+    await exportAuditReport({
+      audit_id: result.id,
+      format,
+      include_remediation: true
+    });
+  };
+
   if (!result) return <div style={{ width: '400px', padding: '20px', color: '#999' }}>Run an audit to see results</div>;
 
   return (
@@ -75,25 +86,94 @@ export const AuditReport: React.FC = () => {
           <div style={{ fontSize: '12px', color: '#888' }}>{result.vulnerabilities.length} issues · {result.total_lines} lines</div>
         </div>
       </div>
-      <button
-        onClick={handleGenerateRemediationPlan}
-        disabled={generatingPlan}
-        style={{
-          width: '100%',
-          padding: '10px 16px',
-          border: 'none',
-          borderRadius: '6px',
-          background: '#4caf50',
-          color: '#fff',
-          cursor: 'pointer',
-          fontSize: '14px',
-          fontWeight: 500,
-          marginBottom: '16px',
-          opacity: generatingPlan ? 0.6 : 1
-        }}
-      >
-        {generatingPlan ? '生成中...' : '📋 生成整改计划'}
-      </button>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+        <button
+          onClick={handleGenerateRemediationPlan}
+          disabled={generatingPlan}
+          style={{
+            flex: 1,
+            padding: '10px 16px',
+            border: 'none',
+            borderRadius: '6px',
+            background: '#4caf50',
+            color: '#fff',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 500,
+            opacity: generatingPlan ? 0.6 : 1
+          }}
+        >
+          {generatingPlan ? '生成中...' : '📋 整改计划'}
+        </button>
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setShowExportMenu(!showExportMenu)}
+            disabled={isExportingReport}
+            style={{
+              padding: '10px 16px',
+              border: 'none',
+              borderRadius: '6px',
+              background: '#1976d2',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 500,
+              opacity: isExportingReport ? 0.6 : 1
+            }}
+          >
+            {isExportingReport ? '导出中...' : '📄 导出报告'}
+          </button>
+          {showExportMenu && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              right: 0,
+              marginTop: '4px',
+              background: '#fff',
+              border: '1px solid #ddd',
+              borderRadius: '6px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              zIndex: 100,
+              minWidth: '140px'
+            }}>
+              <button
+                onClick={() => handleExport('markdown')}
+                style={{
+                  width: '100%',
+                  padding: '10px 16px',
+                  border: 'none',
+                  background: 'transparent',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  borderRadius: '6px',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                📝 Markdown 格式
+              </button>
+              <button
+                onClick={() => handleExport('json')}
+                style={{
+                  width: '100%',
+                  padding: '10px 16px',
+                  border: 'none',
+                  background: 'transparent',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  borderRadius: '6px',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                📊 JSON 格式
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
       {result.score_interpretation && (
         <ScoreInterpretation interpretation={result.score_interpretation} />
       )}
