@@ -191,3 +191,51 @@ export interface ProjectDashboardData {
   recent_activities: RecentActivity[];
   last_updated: string;
 }
+
+export type RemediationStatus = "open" | "in_progress" | "resolved" | "recheck_pending" | "recheck_passed" | "recheck_failed" | "ignored";
+
+export interface RemediationItem {
+  id: string;
+  vulnerability_id: string;
+  vulnerability_name: string;
+  contract_name: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  priority: AuditTaskPriority;
+  line_number: number;
+  description: string;
+  recommendation: string;
+  status: RemediationStatus;
+  assignee?: string;
+  notes?: string;
+  due_date?: string;
+  created_at: string;
+  updated_at: string;
+  resolved_at?: string;
+  recheck_notes?: string;
+  rechecked_at?: string;
+}
+
+export interface RemediationPlan {
+  id: string;
+  audit_id?: string;
+  batch_audit_id?: string;
+  plan_name: string;
+  contract_names: string[];
+  items: RemediationItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RemediationPlanCreate {
+  audit_id?: string;
+  batch_audit_id?: string;
+  plan_name?: string;
+}
+
+export interface RemediationItemUpdate {
+  status?: RemediationStatus;
+  assignee?: string;
+  notes?: string;
+  due_date?: string;
+  recheck_notes?: string;
+}

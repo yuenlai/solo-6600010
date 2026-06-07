@@ -8,10 +8,11 @@ import { AuditHistory } from './components/AuditHistory';
 import { ContractTemplateLibrary } from './components/ContractTemplateLibrary';
 import { AuditTaskList } from './components/AuditTaskList';
 import { ProjectDashboard } from './components/ProjectDashboard';
+import { RemediationPlan } from './components/RemediationPlan';
 import { useAuditStore } from './store/audit';
 
 const App: React.FC = () => {
-  const { mode, setMode, setShowRuleManager, customRules, setShowHistory, setShowTemplateLibrary, setShowTaskList, auditTaskLists, setShowDashboard } = useAuditStore();
+  const { mode, setMode, setShowRuleManager, customRules, setShowHistory, setShowTemplateLibrary, setShowTaskList, auditTaskLists, setShowDashboard, setShowRemediationPlan, remediationPlans } = useAuditStore();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', background: '#2d2d2d', borderBottom: '1px solid #444', gap: '16px' }}>
@@ -39,6 +40,12 @@ const App: React.FC = () => {
           }}>
             📋 任务清单 {auditTaskLists.length > 0 && `(${auditTaskLists.length})`}
           </button>
+          <button onClick={() => setShowRemediationPlan(true)} style={{
+            padding: '6px 16px', border: '1px solid #666', borderRadius: '4px',
+            cursor: 'pointer', fontWeight: 500, background: 'transparent', color: '#ccc'
+          }}>
+            🔧 整改计划 {remediationPlans.length > 0 && `(${remediationPlans.length})`}
+          </button>
           <button onClick={() => setShowRuleManager(true)} style={{
             padding: '6px 16px', border: '1px solid #666', borderRadius: '4px',
             cursor: 'pointer', fontWeight: 500, background: 'transparent', color: '#ccc'
@@ -61,6 +68,7 @@ const App: React.FC = () => {
       <ContractTemplateLibrary />
       <AuditTaskList />
       <ProjectDashboard />
+      <RemediationPlan />
     </div>
   );
 };

@@ -14,16 +14,18 @@ from ..models.contract import (
     CustomRule, CustomRuleCreate, AuditHistoryRecord, ContractHistorySummary,
     FalsePositiveFeedback, FalsePositiveFeedbackCreate, FalsePositiveFeedbackStatus,
     AuditTaskList, AuditTaskListCreate, AuditTaskItem, AuditTaskItemCreate,
-    AuditTaskItemUpdate, AuditTaskStatus,
+    AuditTaskItemUpdate, AuditTaskStatus, AuditTaskPriority,
     RiskDistribution, ProjectContractSummary, CriticalIssue, RecentActivity,
-    ProjectDashboardData, Severity
+    ProjectDashboardData, Severity,
+    RemediationPlan, RemediationPlanCreate, RemediationItem, RemediationItemUpdate,
+    RemediationStatus
 )
 try:
     from ..services.analyzer import analyze_contract, analyze_batch
 except ImportError:
     analyze_contract = None
     analyze_batch = None
-from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists
+from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists, remediation_plans
 
 class DummyRouter:
     def post(self, path):
@@ -1008,3 +1010,129 @@ async def get_project_dashboard() -> ProjectDashboardData:
         recent_activities=recent_activity_objs,
         last_updated=datetime.now().isoformat()
     )
+
+def severity_to_priority(severity: Severity) -> AuditTaskPriority:
+    if severity == Severity.critical:
+        return AuditTaskPriority.critical
+    elif severity == Severity.high:
+        return AuditTaskPriority.high
+    elif severity == Severity.medium:
+        return AuditTaskPriority.medium
+    else:
+        return AuditTaskPriority.low
+
+@router.post("/remediation-plans")
+async def create_remediation_plan(req: RemediationPlanCreate) -> RemediationPlan:
+    plan_id = str(uuid.uuid4())[:8]
+    now = datetime.now().isoformat()
+    
+    audit_results_list = []
+    contract_names = []
+    
+    if req.audit_id and req.audit_id in audit_results:
+        result = audit_results[req.audit_id]
+        audit_results_list.append(result)
+        contract_names.append(result.contract_name)
+    elif req.batch_audit_id and req.batch_audit_id in batch_audit_results:
+        batch_result = batch_audit_results[req.batch_audit_id]
+        audit_results_list = batch_result.results
+        contract_names = [r.contract_name for r in batch_result.results]
+    else:
+        raise HTTPException(404, "Audit not found")
+    
+    items = []
+    for result in audit_results_list:
+        for vuln in result.vulnerabilities:
+            sev = vuln.severity.value if hasattr(vuln.severity, 'value') else str(vuln.severity)
+            item = RemediationItem(
+                id=str(uuid.uuid4())[:8],
+                vulnerability_id=vuln.id,
+                vulnerability_name=vuln.name,
+                contract_name=result.contract_name,
+                severity=Severity(sev),
+                priority=severity_to_priority(Severity(sev)),
+                line_number=vuln.line,
+                description=vuln.description,
+                recommendation=vuln.recommendation,
+                status=RemediationStatus.open,
+                created_at=now,
+                updated_at=now
+            )
+            items.append(item)
+    
+    items.sort(key=lambda x: (
+        0 if x.severity == Severity.critical else 1 if x.severity == Severity.high else 2 if x.severity == Severity.medium else 3,
+        x.line_number
+    ))
+    
+    plan_name = req.plan_name or f"整改计划 - {', '.join(contract_names)}"
+    
+    plan = RemediationPlan(
+        id=plan_id,
+        audit_id=req.audit_id,
+        batch_audit_id=req.batch_audit_id,
+        plan_name=plan_name,
+        contract_names=contract_names,
+        items=items,
+        created_at=now,
+        updated_at=now
+    )
+    
+    remediation_plans[plan_id] = plan
+    return plan
+
+@router.get("/remediation-plans")
+async def list_remediation_plans() -> list[RemediationPlan]:
+    return sorted(remediation_plans.values(), key=lambda x: x.updated_at, reverse=True)
+
+@router.get("/remediation-plans/{plan_id}")
+async def get_remediation_plan(plan_id: str) -> RemediationPlan:
+    if plan_id not in remediation_plans:
+        raise HTTPException(404, "Remediation plan not found")
+    return remediation_plans[plan_id]
+
+@router.delete("/remediation-plans/{plan_id}")
+async def delete_remediation_plan(plan_id: str):
+    if plan_id not in remediation_plans:
+        raise HTTPException(404, "Remediation plan not found")
+    del remediation_plans[plan_id]
+    return {"message": "Remediation plan deleted"}
+
+@router.put("/remediation-plans/{plan_id}/items/{item_id}")
+async def update_remediation_item(
+    plan_id: str, 
+    item_id: str, 
+    req: RemediationItemUpdate
+) -> RemediationItem:
+    if plan_id not in remediation_plans:
+        raise HTTPException(404, "Remediation plan not found")
+    
+    plan = remediation_plans[plan_id]
+    item_index = next((i for i, item in enumerate(plan.items) if item.id == item_id), -1)
+    if item_index == -1:
+        raise HTTPException(404, "Remediation item not found")
+    
+    item = plan.items[item_index]
+    now = datetime.now().isoformat()
+    
+    if req.status is not None:
+        item.status = req.status
+        if req.status == RemediationStatus.resolved:
+            item.resolved_at = now
+        elif req.status in [RemediationStatus.recheck_passed, RemediationStatus.recheck_failed]:
+            item.rechecked_at = now
+    
+    if req.assignee is not None:
+        item.assignee = req.assignee
+    if req.notes is not None:
+        item.notes = req.notes
+    if req.due_date is not None:
+        item.due_date = req.due_date
+    if req.recheck_notes is not None:
+        item.recheck_notes = req.recheck_notes
+    
+    item.updated_at = now
+    plan.updated_at = now
+    remediation_plans[plan_id] = plan
+    
+    return item

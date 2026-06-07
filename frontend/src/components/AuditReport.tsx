@@ -15,9 +15,10 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export const AuditReport: React.FC = () => {
-  const { result, submitFalsePositiveFeedback, falsePositiveFeedbacks, fetchFalsePositiveFeedbacks } = useAuditStore();
+  const { result, submitFalsePositiveFeedback, falsePositiveFeedbacks, fetchFalsePositiveFeedbacks, createRemediationPlan, setShowRemediationPlan, setSelectedRemediationPlan } = useAuditStore();
   const [showFeedbackForm, setShowFeedbackForm] = useState<string | null>(null);
   const [feedbackReason, setFeedbackReason] = useState('');
+  const [generatingPlan, setGeneratingPlan] = useState(false);
 
   useEffect(() => {
     if (result) {
@@ -42,6 +43,23 @@ export const AuditReport: React.FC = () => {
     setShowFeedbackForm(null);
   };
 
+  const handleGenerateRemediationPlan = async () => {
+    if (!result) return;
+    setGeneratingPlan(true);
+    try {
+      const plan = await createRemediationPlan({
+        audit_id: result.id,
+        plan_name: `整改计划 - ${result.contract_name}`,
+      });
+      setSelectedRemediationPlan(plan);
+      setShowRemediationPlan(true);
+    } catch (e) {
+      console.error('Failed to generate remediation plan:', e);
+    } finally {
+      setGeneratingPlan(false);
+    }
+  };
+
   if (!result) return <div style={{ width: '400px', padding: '20px', color: '#999' }}>Run an audit to see results</div>;
 
   return (
@@ -51,9 +69,30 @@ export const AuditReport: React.FC = () => {
           background: result.score >= 80 ? '#e8f5e9' : result.score >= 50 ? '#fff3e0' : '#ffebee',
           fontSize: '24px', fontWeight: 'bold', color: result.score >= 80 ? '#2e7d32' : result.score >= 50 ? '#e65100' : '#b71c1c' }}>
           {result.score}</div>
-        <div><div style={{ fontWeight: 600 }}>{result.contract_name}</div>
-          <div style={{ fontSize: '12px', color: '#888' }}>{result.vulnerabilities.length} issues · {result.total_lines} lines</div></div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600 }}>{result.contract_name}</div>
+          <div style={{ fontSize: '12px', color: '#888' }}>{result.vulnerabilities.length} issues · {result.total_lines} lines</div>
+        </div>
       </div>
+      <button
+        onClick={handleGenerateRemediationPlan}
+        disabled={generatingPlan}
+        style={{
+          width: '100%',
+          padding: '10px 16px',
+          border: 'none',
+          borderRadius: '6px',
+          background: '#4caf50',
+          color: '#fff',
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontWeight: 500,
+          marginBottom: '16px',
+          opacity: generatingPlan ? 0.6 : 1
+        }}
+      >
+        {generatingPlan ? '生成中...' : '📋 生成整改计划'}
+      </button>
       {result.vulnerabilities.map((v: Vulnerability) => {
         const feedback = getFeedbackForVuln(v.id);
         return (

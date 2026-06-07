@@ -15,11 +15,12 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export const BatchAuditReport: React.FC = () => {
-  const { batchResult, submitFalsePositiveFeedback, falsePositiveFeedbacks, fetchFalsePositiveFeedbacks } = useAuditStore();
+  const { batchResult, submitFalsePositiveFeedback, falsePositiveFeedbacks, fetchFalsePositiveFeedbacks, createRemediationPlan, setShowRemediationPlan, setSelectedRemediationPlan } = useAuditStore();
   const [view, setView] = useState<'ranking' | 'common'>('ranking');
   const [selectedContract, setSelectedContract] = useState<AuditResult | null>(null);
   const [showFeedbackForm, setShowFeedbackForm] = useState<string | null>(null);
   const [feedbackReason, setFeedbackReason] = useState('');
+  const [generatingPlan, setGeneratingPlan] = useState(false);
 
   useEffect(() => {
     if (selectedContract) {
@@ -44,7 +45,42 @@ export const BatchAuditReport: React.FC = () => {
     setShowFeedbackForm(null);
   };
 
+  const handleGenerateRemediationPlan = async () => {
+    if (!batchResult) return;
+    setGeneratingPlan(true);
+    try {
+      const contractNames = batchResult.results.map(r => r.contract_name);
+      const plan = await createRemediationPlan({
+        batch_audit_id: batchResult.id,
+        plan_name: `整改计划 - ${contractNames.join(', ')}`,
+      });
+      setSelectedRemediationPlan(plan);
+      setShowRemediationPlan(true);
+    } catch (e) {
+      console.error('Failed to generate remediation plan:', e);
+    } finally {
+      setGeneratingPlan(false);
+    }
+  };
+
   if (!batchResult) return <div style={{ width: '500px', padding: '20px', color: '#999' }}>提交批量审计以查看对比结果</div>;
+
+  const handleGenerateSingleRemediationPlan = async () => {
+    if (!selectedContract) return;
+    setGeneratingPlan(true);
+    try {
+      const plan = await createRemediationPlan({
+        audit_id: selectedContract.id,
+        plan_name: `整改计划 - ${selectedContract.contract_name}`,
+      });
+      setSelectedRemediationPlan(plan);
+      setShowRemediationPlan(true);
+    } catch (e) {
+      console.error('Failed to generate remediation plan:', e);
+    } finally {
+      setGeneratingPlan(false);
+    }
+  };
 
   if (selectedContract) {
     return (
@@ -55,9 +91,30 @@ export const BatchAuditReport: React.FC = () => {
             background: selectedContract.score >= 80 ? '#e8f5e9' : selectedContract.score >= 50 ? '#fff3e0' : '#ffebee',
             fontSize: '24px', fontWeight: 'bold', color: selectedContract.score >= 80 ? '#2e7d32' : selectedContract.score >= 50 ? '#e65100' : '#b71c1c' }}>
             {selectedContract.score}</div>
-          <div><div style={{ fontWeight: 600 }}>{selectedContract.contract_name}</div>
-            <div style={{ fontSize: '12px', color: '#888' }}>{selectedContract.vulnerabilities.length} 个问题 · {selectedContract.total_lines} 行</div></div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 600 }}>{selectedContract.contract_name}</div>
+            <div style={{ fontSize: '12px', color: '#888' }}>{selectedContract.vulnerabilities.length} 个问题 · {selectedContract.total_lines} 行</div>
+          </div>
         </div>
+        <button
+          onClick={handleGenerateSingleRemediationPlan}
+          disabled={generatingPlan}
+          style={{
+            width: '100%',
+            padding: '10px 16px',
+            border: 'none',
+            borderRadius: '6px',
+            background: '#4caf50',
+            color: '#fff',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 500,
+            marginBottom: '16px',
+            opacity: generatingPlan ? 0.6 : 1
+          }}
+        >
+          {generatingPlan ? '生成中...' : '📋 生成该合约整改计划'}
+        </button>
         {selectedContract.vulnerabilities.map((v: Vulnerability) => {
           const feedback = getFeedbackForVuln(v.id);
           return (
@@ -135,11 +192,29 @@ export const BatchAuditReport: React.FC = () => {
       </div>
 
       <div style={{ padding: '16px', background: '#f5f5f5', borderRadius: '8px', marginBottom: '16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginBottom: '12px' }}>
           <div><div style={{ fontSize: '24px', fontWeight: 'bold', color: '#e53935' }}>{batchResult.total_contracts}</div><div style={{ fontSize: '12px', color: '#666' }}>合约数量</div></div>
           <div><div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ff9800' }}>{batchResult.total_vulnerabilities}</div><div style={{ fontSize: '12px', color: '#666' }}>问题总数</div></div>
           <div><div style={{ fontSize: '24px', fontWeight: 'bold', color: batchResult.average_score >= 80 ? '#2e7d32' : batchResult.average_score >= 50 ? '#e65100' : '#b71c1c' }}>{batchResult.average_score}</div><div style={{ fontSize: '12px', color: '#666' }}>平均分</div></div>
         </div>
+        <button
+          onClick={handleGenerateRemediationPlan}
+          disabled={generatingPlan}
+          style={{
+            width: '100%',
+            padding: '10px 16px',
+            border: 'none',
+            borderRadius: '6px',
+            background: '#4caf50',
+            color: '#fff',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 500,
+            opacity: generatingPlan ? 0.6 : 1
+          }}
+        >
+          {generatingPlan ? '生成中...' : '📋 生成全部合约整改计划'}
+        </button>
       </div>
 
       {view === 'ranking' && (

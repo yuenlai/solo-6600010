@@ -179,6 +179,57 @@ if _HAS_PYDANTIC:
         critical_issues: list[CriticalIssue]
         recent_activities: list[RecentActivity]
         last_updated: str
+
+    class RemediationStatus(str, Enum):
+        open = "open"
+        in_progress = "in_progress"
+        resolved = "resolved"
+        recheck_pending = "recheck_pending"
+        recheck_passed = "recheck_passed"
+        recheck_failed = "recheck_failed"
+        ignored = "ignored"
+
+    class RemediationItem(BaseModel):
+        id: str
+        vulnerability_id: str
+        vulnerability_name: str
+        contract_name: str
+        severity: Severity
+        priority: AuditTaskPriority
+        line_number: int
+        description: str
+        recommendation: str
+        status: RemediationStatus
+        assignee: str | None = None
+        notes: str | None = None
+        due_date: str | None = None
+        created_at: str
+        updated_at: str
+        resolved_at: str | None = None
+        recheck_notes: str | None = None
+        rechecked_at: str | None = None
+
+    class RemediationPlan(BaseModel):
+        id: str
+        audit_id: str | None = None
+        batch_audit_id: str | None = None
+        plan_name: str
+        contract_names: list[str]
+        items: list[RemediationItem]
+        created_at: str
+        updated_at: str
+
+    class RemediationPlanCreate(BaseModel):
+        audit_id: str | None = None
+        batch_audit_id: str | None = None
+        plan_name: str | None = None
+
+    class RemediationItemUpdate(BaseModel):
+        status: RemediationStatus | None = None
+        assignee: str | None = None
+        notes: str | None = None
+        due_date: str | None = None
+        recheck_notes: str | None = None
 else:
     class Vulnerability:
         pass

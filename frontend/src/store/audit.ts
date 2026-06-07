@@ -4,7 +4,8 @@ import {
   ContractHistorySummary, AuditHistoryRecord, ContractCompareResult,
   ContractTemplate, FalsePositiveFeedback, FalsePositiveFeedbackCreate,
   AuditTaskList, AuditTaskListCreate, AuditTaskItem, AuditTaskItemCreate,
-  AuditTaskItemUpdate, ProjectDashboardData
+  AuditTaskItemUpdate, ProjectDashboardData,
+  RemediationPlan, RemediationPlanCreate, RemediationItem, RemediationItemUpdate
 } from '../types';
 
 interface AuditState {
@@ -69,6 +70,16 @@ interface AuditState {
   dashboardData: ProjectDashboardData | null;
   setDashboardData: (data: ProjectDashboardData | null) => void;
   fetchDashboardData: () => Promise<void>;
+  showRemediationPlan: boolean;
+  setShowRemediationPlan: (show: boolean) => void;
+  remediationPlans: RemediationPlan[];
+  selectedRemediationPlan: RemediationPlan | null;
+  setRemediationPlans: (plans: RemediationPlan[]) => void;
+  setSelectedRemediationPlan: (plan: RemediationPlan | null) => void;
+  fetchRemediationPlans: () => Promise<void>;
+  createRemediationPlan: (data: RemediationPlanCreate) => Promise<RemediationPlan>;
+  deleteRemediationPlan: (planId: string) => Promise<void>;
+  updateRemediationItem: (planId: string, itemId: string, data: RemediationItemUpdate) => Promise<RemediationItem>;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -137,6 +148,9 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   selectedTaskList: null,
   showDashboard: false,
   dashboardData: null,
+  showRemediationPlan: false,
+  remediationPlans: [],
+  selectedRemediationPlan: null,
   setMode: (m) => set({ mode: m, result: null, batchResult: null }),
   setSourceCode: (code) => set({ sourceCode: code }),
   setResult: (r) => set({ result: r }),
@@ -288,5 +302,54 @@ export const useAuditStore = create<AuditState>((set, get) => ({
       console.error('Failed to fetch dashboard data:', e);
       get().setDashboardData(null);
     }
+  },
+  setShowRemediationPlan: (show) => set({ showRemediationPlan: show }),
+  setRemediationPlans: (plans) => set({ remediationPlans: plans }),
+  setSelectedRemediationPlan: (plan) => set({ selectedRemediationPlan: plan }),
+  fetchRemediationPlans: async () => {
+    try {
+      const res = await fetch('/api/audit/remediation-plans');
+      if (res.ok) {
+        const plans = await res.json();
+        get().setRemediationPlans(plans);
+      }
+    } catch (e) {
+      console.error('Failed to fetch remediation plans:', e);
+    }
+  },
+  createRemediationPlan: async (data) => {
+    const res = await fetch('/api/audit/remediation-plans', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const plan = await res.json();
+    get().setRemediationPlans([plan, ...get().remediationPlans]);
+    return plan;
+  },
+  deleteRemediationPlan: async (planId) => {
+    await fetch(`/api/audit/remediation-plans/${planId}`, { method: 'DELETE' });
+    get().setRemediationPlans(get().remediationPlans.filter(p => p.id !== planId));
+    if (get().selectedRemediationPlan?.id === planId) {
+      get().setSelectedRemediationPlan(null);
+    }
+  },
+  updateRemediationItem: async (planId, itemId, data) => {
+    const res = await fetch(`/api/audit/remediation-plans/${planId}/items/${itemId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const item = await res.json();
+    const plan = get().remediationPlans.find(p => p.id === planId);
+    if (plan) {
+      const updatedItems = plan.items.map(i => i.id === itemId ? item : i);
+      const updatedPlan = { ...plan, items: updatedItems, updated_at: new Date().toISOString() };
+      get().setRemediationPlans(get().remediationPlans.map(p => p.id === planId ? updatedPlan : p));
+      if (get().selectedRemediationPlan?.id === planId) {
+        get().setSelectedRemediationPlan(updatedPlan);
+      }
+    }
+    return item;
   },
 }));
