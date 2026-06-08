@@ -8,7 +8,7 @@ import {
   RemediationPlan, RemediationPlanCreate, RemediationItem, RemediationItemUpdate,
   AuditReport, AuditReportExportRequest, ContractFamilyAnalysisResult,
   VersionMigrationAssessmentResult, RiskSubscription, RiskSubscriptionCreate,
-  SubscriptionDashboard
+  SubscriptionDashboard, ReReviewRequest, ReReviewResult
 } from '../types';
 
 interface AuditState {
@@ -119,6 +119,16 @@ interface AuditState {
   deleteSubscription: (subId: string) => Promise<void>;
   fetchSubscriptionDashboards: () => Promise<void>;
   toggleSubscriptionEnabled: (subId: string) => Promise<void>;
+  showReReview: boolean;
+  setShowReReview: (show: boolean) => void;
+  reReviewResults: ReReviewResult[];
+  setReReviewResults: (results: ReReviewResult[]) => void;
+  selectedReReviewResult: ReReviewResult | null;
+  setSelectedReReviewResult: (result: ReReviewResult | null) => void;
+  isSubmittingReReview: boolean;
+  setIsSubmittingReReview: (value: boolean) => void;
+  submitReReview: (data: ReReviewRequest) => Promise<ReReviewResult>;
+  fetchReReviewResults: () => Promise<void>;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -202,6 +212,10 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   showRuleSubscription: false,
   riskSubscriptions: [],
   subscriptionDashboards: [],
+  showReReview: false,
+  reReviewResults: [],
+  selectedReReviewResult: null,
+  isSubmittingReReview: false,
   setMode: (m) => set({ mode: m, result: null, batchResult: null }),
   setSourceCode: (code) => set({ sourceCode: code }),
   setResult: (r) => set({ result: r }),
@@ -578,5 +592,31 @@ export const useAuditStore = create<AuditState>((set, get) => ({
     });
     const data = await res.json();
     get().setRiskSubscriptions(get().riskSubscriptions.map(s => s.id === subId ? data : s));
+  },
+  setShowReReview: (show) => set({ showReReview: show }),
+  setReReviewResults: (results) => set({ reReviewResults: results }),
+  setSelectedReReviewResult: (result) => set({ selectedReReviewResult: result }),
+  setIsSubmittingReReview: (value) => set({ isSubmittingReReview: value }),
+  submitReReview: async (data) => {
+    const res = await fetch('/api/audit/re-review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const result = await res.json();
+    get().setReReviewResults([result, ...get().reReviewResults]);
+    get().setSelectedReReviewResult(result);
+    return result;
+  },
+  fetchReReviewResults: async () => {
+    try {
+      const res = await fetch('/api/audit/re-review');
+      if (res.ok) {
+        const data = await res.json();
+        get().setReReviewResults(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch re-review results:', e);
+    }
   },
 }));

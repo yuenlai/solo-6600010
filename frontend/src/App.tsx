@@ -12,10 +12,11 @@ import { RemediationPlan } from './components/RemediationPlan';
 import { ContractFamilyAnalysis } from './components/ContractFamilyAnalysis';
 import { VersionMigrationAssessment } from './components/VersionMigrationAssessment';
 import { RuleSubscription } from './components/RuleSubscription';
+import { ReReviewApplication } from './components/ReReviewApplication';
 import { useAuditStore } from './store/audit';
 
 const App: React.FC = () => {
-  const { mode, setMode, setShowRuleManager, customRules, setShowHistory, setShowTemplateLibrary, setShowTaskList, auditTaskLists, setShowDashboard, setShowRemediationPlan, remediationPlans, riskSubscriptions, setShowRuleSubscription } = useAuditStore();
+  const { mode, setMode, setShowRuleManager, customRules, setShowHistory, setShowTemplateLibrary, setShowTaskList, auditTaskLists, setShowDashboard, setShowRemediationPlan, remediationPlans, riskSubscriptions, setShowRuleSubscription, reReviewResults, setShowReReview } = useAuditStore();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', background: '#2d2d2d', borderBottom: '1px solid #444', gap: '16px' }}>
@@ -55,6 +56,12 @@ const App: React.FC = () => {
           }}>
             自定义规则 {customRules.length > 0 && `(${customRules.length})`}
           </button>
+          <button onClick={() => setShowReReview(true)} style={{
+            padding: '6px 16px', border: '1px solid #666', borderRadius: '4px',
+            cursor: 'pointer', fontWeight: 500, background: 'transparent', color: '#ccc'
+          }}>
+            🔍 复审申请 {reReviewResults.length > 0 && `(${reReviewResults.length})`}
+          </button>
           <button onClick={() => setShowRuleSubscription(true)} style={{
             padding: '6px 16px', border: '1px solid #666', borderRadius: '4px',
             cursor: 'pointer', fontWeight: 500, background: 'transparent', color: '#ccc'
@@ -81,6 +88,7 @@ const App: React.FC = () => {
       <ContractFamilyAnalysis />
       <VersionMigrationAssessment />
       <RuleSubscription />
+      <ReReviewApplication />
     </div>
   );
 };

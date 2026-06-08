@@ -439,6 +439,47 @@ if _HAS_PYDANTIC:
         trend_direction: str
         latest_match_at: str | None = None
 
+    class ReReviewStatus(str, Enum):
+        pending = "pending"
+        approved = "approved"
+        rejected = "rejected"
+
+    class VulnDiffItem(BaseModel):
+        vulnerability_name: str
+        severity: Severity
+        line: int | None = None
+        description: str
+        change_type: str
+        old_severity: Severity | None = None
+        recommendation: str | None = None
+
+    class ReReviewRequest(BaseModel):
+        plan_id: str
+        source_code: str
+        remediation_summary: str | None = None
+
+    class ReReviewResult(BaseModel):
+        id: str
+        plan_id: str
+        contract_name: str
+        old_audit_id: str
+        new_audit_id: str
+        old_score: float
+        new_score: float
+        score_change: float
+        score_change_percent: float
+        old_vulnerability_count: int
+        new_vulnerability_count: int
+        resolved_vulnerabilities: list[VulnDiffItem]
+        new_vulnerabilities: list[VulnDiffItem]
+        persistent_vulnerabilities: list[VulnDiffItem]
+        severity_diff: dict[str, dict[str, int]]
+        overall_assessment: str
+        risk_level_change: str
+        recheck_passed: bool
+        remediation_summary: str | None = None
+        created_at: str
+
 else:
     class Vulnerability:
         pass
@@ -561,4 +602,14 @@ else:
     class SubscriptionTrendDataPoint:
         pass
     class SubscriptionDashboard:
+        pass
+    class ReReviewStatus(str, Enum):
+        pending = "pending"
+        approved = "approved"
+        rejected = "rejected"
+    class VulnDiffItem:
+        pass
+    class ReReviewRequest:
+        pass
+    class ReReviewResult:
         pass

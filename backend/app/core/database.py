@@ -10,6 +10,7 @@ remediation_plans = {}
 audit_reports = {}
 migration_assessments = {}
 risk_subscriptions = {}
+re_review_results = {}
 
 __all__ = [
     'audit_results',
@@ -23,5 +24,6 @@ __all__ = [
     'remediation_plans',
     'audit_reports',
     'migration_assessments',
-    'risk_subscriptions'
+    'risk_subscriptions',
+    're_review_results'
 ]

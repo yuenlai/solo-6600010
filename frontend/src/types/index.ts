@@ -471,3 +471,42 @@ export interface SubscriptionDashboard {
   trend_direction: "increasing" | "decreasing" | "stable";
   latest_match_at: string | null;
 }
+
+export interface VulnDiffItem {
+  vulnerability_name: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  line: number | null;
+  description: string;
+  change_type: "resolved" | "added" | "persistent";
+  old_severity: "critical" | "high" | "medium" | "low" | "info" | null;
+  recommendation: string | null;
+}
+
+export interface ReReviewRequest {
+  plan_id: string;
+  source_code: string;
+  remediation_summary?: string;
+}
+
+export interface ReReviewResult {
+  id: string;
+  plan_id: string;
+  contract_name: string;
+  old_audit_id: string;
+  new_audit_id: string;
+  old_score: number;
+  new_score: number;
+  score_change: number;
+  score_change_percent: number;
+  old_vulnerability_count: number;
+  new_vulnerability_count: number;
+  resolved_vulnerabilities: VulnDiffItem[];
+  new_vulnerabilities: VulnDiffItem[];
+  persistent_vulnerabilities: VulnDiffItem[];
+  severity_diff: Record<string, { old: number; new: number; change: number }>;
+  overall_assessment: string;
+  risk_level_change: string;
+  recheck_passed: boolean;
+  remediation_summary: string | null;
+  created_at: string;
+}

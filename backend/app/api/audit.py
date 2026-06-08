@@ -23,7 +23,8 @@ from ..models.contract import (
     AuditReport, AuditReportExportRequest,
     ContractFamilyAnalysisResult,
     VersionMigrationAssessmentRequest, VersionMigrationAssessmentResult,
-    RiskSubscription, RiskSubscriptionCreate, SubscriptionMatch, SubscriptionTrendDataPoint, SubscriptionDashboard
+    RiskSubscription, RiskSubscriptionCreate, SubscriptionMatch, SubscriptionTrendDataPoint, SubscriptionDashboard,
+    VulnDiffItem, ReReviewRequest, ReReviewResult
 )
 try:
     from ..services.analyzer import analyze_contract, analyze_batch, analyze_contract_family, assess_version_migration
@@ -32,7 +33,7 @@ except ImportError:
     analyze_batch = None
     analyze_contract_family = None
     assess_version_migration = None
-from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists, remediation_plans, audit_reports, migration_assessments, risk_subscriptions
+from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists, remediation_plans, audit_reports, migration_assessments, risk_subscriptions, re_review_results
 
 class DummyRouter:
     def post(self, path):
@@ -1775,3 +1776,172 @@ async def get_subscriptions_dashboard() -> list[SubscriptionDashboard]:
         ))
     dashboards.sort(key=lambda d: d.subscription.updated_at, reverse=True)
     return dashboards
+
+
+def _compute_vuln_diffs(old_vulns, new_vulns):
+    resolved = []
+    new_items = []
+    persistent = []
+
+    old_map = {(v.name, v.line): v for v in old_vulns}
+    new_map = {(v.name, v.line): v for v in new_vulns}
+
+    for key, v in old_map.items():
+        if key not in new_map:
+            sev = v.severity.value if hasattr(v.severity, 'value') else str(v.severity)
+            resolved.append(VulnDiffItem(
+                vulnerability_name=v.name,
+                severity=Severity(sev),
+                line=v.line,
+                description=v.description,
+                change_type="resolved",
+                recommendation=v.recommendation
+            ))
+
+    for key, v in new_map.items():
+        sev = v.severity.value if hasattr(v.severity, 'value') else str(v.severity)
+        if key not in old_map:
+            new_items.append(VulnDiffItem(
+                vulnerability_name=v.name,
+                severity=Severity(sev),
+                line=v.line,
+                description=v.description,
+                change_type="added",
+                recommendation=v.recommendation
+            ))
+        else:
+            old_v = old_map[key]
+            old_sev = old_v.severity.value if hasattr(old_v.severity, 'value') else str(old_v.severity)
+            persistent.append(VulnDiffItem(
+                vulnerability_name=v.name,
+                severity=Severity(sev),
+                line=v.line,
+                description=v.description,
+                change_type="persistent",
+                old_severity=Severity(old_sev) if old_sev != sev else None,
+                recommendation=v.recommendation
+            ))
+
+    return resolved, new_items, persistent
+
+
+def _compute_severity_diff(old_vulns, new_vulns):
+    old_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    new_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    for v in old_vulns:
+        sev = v.severity.value if hasattr(v.severity, 'value') else str(v.severity)
+        if sev in old_counts:
+            old_counts[sev] += 1
+    for v in new_vulns:
+        sev = v.severity.value if hasattr(v.severity, 'value') else str(v.severity)
+        if sev in new_counts:
+            new_counts[sev] += 1
+    return {sev: {"old": old_counts[sev], "new": new_counts[sev], "change": new_counts[sev] - old_counts[sev]} for sev in old_counts}
+
+
+def _generate_overall_assessment(old_score, new_score, resolved_count, new_count, persistent_count, severity_diff):
+    score_change = new_score - old_score
+    parts = []
+    if resolved_count > 0:
+        parts.append(f"已修复 {resolved_count} 个漏洞")
+    if new_count > 0:
+        parts.append(f"新增 {new_count} 个漏洞")
+    if persistent_count > 0:
+        parts.append(f"仍有 {persistent_count} 个漏洞未修复")
+    if score_change > 0:
+        parts.append(f"安全评分提升 {score_change:.1f} 分")
+    elif score_change < 0:
+        parts.append(f"安全评分下降 {abs(score_change):.1f} 分")
+    else:
+        parts.append("安全评分未变化")
+
+    critical_change = severity_diff.get("critical", {}).get("change", 0)
+    high_change = severity_diff.get("high", {}).get("change", 0)
+    if critical_change < 0:
+        parts.append(f"严重漏洞减少 {abs(critical_change)} 个")
+    elif critical_change > 0:
+        parts.append(f"⚠️ 严重漏洞增加 {critical_change} 个")
+    if high_change < 0:
+        parts.append(f"高级别漏洞减少 {abs(high_change)} 个")
+    elif high_change > 0:
+        parts.append(f"⚠️ 高级别漏洞增加 {high_change} 个")
+
+    return "；".join(parts) + "。"
+
+
+@router.post("/re-review")
+async def submit_re_review(req: ReReviewRequest) -> ReReviewResult:
+    if req.plan_id not in remediation_plans:
+        raise HTTPException(404, "Remediation plan not found")
+
+    plan = remediation_plans[req.plan_id]
+
+    old_audit_id = plan.audit_id
+    old_result = None
+    if old_audit_id and old_audit_id in audit_results:
+        old_result = audit_results[old_audit_id]
+    elif plan.batch_audit_id and plan.batch_audit_id in batch_audit_results:
+        batch = batch_audit_results[plan.batch_audit_id]
+        if batch.results:
+            old_result = batch.results[0]
+
+    if not old_result:
+        raise HTTPException(404, "Original audit result not found")
+
+    if not analyze_contract:
+        raise HTTPException(500, "Analyzer not available")
+
+    new_result = analyze_contract(req.source_code, old_result.contract_name)
+    audit_results[new_result.id] = new_result
+    archive_audit_result(new_result, req.source_code)
+
+    resolved, new_vulns, persistent = _compute_vuln_diffs(old_result.vulnerabilities, new_result.vulnerabilities)
+    severity_diff = _compute_severity_diff(old_result.vulnerabilities, new_result.vulnerabilities)
+    score_change = new_result.score - old_result.score
+    score_change_pct = round((score_change / old_result.score) * 100, 2) if old_result.score > 0 else 0
+    overall_assessment = _generate_overall_assessment(
+        old_result.score, new_result.score, len(resolved), len(new_vulns), len(persistent), severity_diff
+    )
+    old_risk = get_risk_level(old_result.score)
+    new_risk = get_risk_level(new_result.score)
+    risk_level_change = f"{old_risk} → {new_risk}"
+    recheck_passed = new_result.score >= old_result.score and len(new_vulns) == 0
+
+    review_id = str(uuid.uuid4())[:8]
+    now = datetime.now().isoformat()
+    result = ReReviewResult(
+        id=review_id,
+        plan_id=req.plan_id,
+        contract_name=old_result.contract_name,
+        old_audit_id=old_result.id,
+        new_audit_id=new_result.id,
+        old_score=old_result.score,
+        new_score=new_result.score,
+        score_change=score_change,
+        score_change_percent=score_change_pct,
+        old_vulnerability_count=len(old_result.vulnerabilities),
+        new_vulnerability_count=len(new_result.vulnerabilities),
+        resolved_vulnerabilities=resolved,
+        new_vulnerabilities=new_vulns,
+        persistent_vulnerabilities=persistent,
+        severity_diff=severity_diff,
+        overall_assessment=overall_assessment,
+        risk_level_change=risk_level_change,
+        recheck_passed=recheck_passed,
+        remediation_summary=req.remediation_summary,
+        created_at=now
+    )
+    re_review_results[review_id] = result
+    return result
+
+
+@router.get("/re-review")
+async def list_re_reviews() -> list[ReReviewResult]:
+    return sorted(re_review_results.values(), key=lambda x: x.created_at, reverse=True)
+
+
+@router.get("/re-review/{review_id}")
+async def get_re_review(review_id: str) -> ReReviewResult:
+    if review_id not in re_review_results:
+        raise HTTPException(404, "Re-review result not found")
+    return re_review_results[review_id]
