@@ -310,6 +310,48 @@ if _HAS_PYDANTIC:
         format: str = "markdown"
         include_remediation: bool = True
 
+    class ContractSimilarity(BaseModel):
+        contract_name: str
+        similarity: float
+        shared_patterns: list[str]
+
+    class FamilyDuplicateRisk(BaseModel):
+        vulnerability_name: str
+        severity: Severity
+        affected_contracts: list[str]
+        description: str
+        recommendation: str
+        occurrence_count: int
+        risk_amplification: str
+
+    class FamilyDifferentialRisk(BaseModel):
+        vulnerability_name: str
+        severity: Severity
+        contract_name: str
+        description: str
+        recommendation: str
+        line: int
+        missing_in: list[str]
+
+    class ContractFamily(BaseModel):
+        family_id: str
+        family_name: str
+        members: list[str]
+        similarity_matrix: dict[str, list[ContractSimilarity]]
+        avg_similarity: float
+        shared_vulnerability_patterns: list[str]
+
+    class ContractFamilyAnalysisResult(BaseModel):
+        id: str
+        families: list[ContractFamily]
+        duplicate_risks: list[FamilyDuplicateRisk]
+        differential_risks: list[FamilyDifferentialRisk]
+        total_contracts: int
+        total_families: int
+        cross_family_risks: int
+        analysis_summary: str
+        analyzed_at: str
+
 else:
     class Vulnerability:
         pass
@@ -402,4 +444,14 @@ else:
     class AuditReport:
         pass
     class AuditReportExportRequest:
+        pass
+    class ContractSimilarity:
+        pass
+    class FamilyDuplicateRisk:
+        pass
+    class FamilyDifferentialRisk:
+        pass
+    class ContractFamily:
+        pass
+    class ContractFamilyAnalysisResult:
         pass

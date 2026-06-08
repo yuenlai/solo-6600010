@@ -20,13 +20,15 @@ from ..models.contract import (
     RemediationPlan, RemediationPlanCreate, RemediationItem, RemediationItemUpdate,
     RemediationStatus,
     ReportIssue, ReportConclusion, ReportRemediationItem, ReportRemediationSummary,
-    AuditReport, AuditReportExportRequest
+    AuditReport, AuditReportExportRequest,
+    ContractFamilyAnalysisResult
 )
 try:
-    from ..services.analyzer import analyze_contract, analyze_batch
+    from ..services.analyzer import analyze_contract, analyze_batch, analyze_contract_family
 except ImportError:
     analyze_contract = None
     analyze_batch = None
+    analyze_contract_family = None
 from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists, remediation_plans, audit_reports
 
 class DummyRouter:
@@ -1523,3 +1525,9 @@ async def get_report(report_id: str) -> AuditReport:
 @router.get("/reports")
 async def list_reports() -> list[AuditReport]:
     return sorted(audit_reports.values(), key=lambda r: r.generated_at, reverse=True)
+
+@router.post("/family-analysis")
+async def family_analysis(req: BatchAuditRequest) -> ContractFamilyAnalysisResult:
+    if not analyze_contract_family:
+        raise HTTPException(500, "Family analysis not available")
+    return analyze_contract_family(req.contracts)

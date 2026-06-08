@@ -327,3 +327,50 @@ export interface AuditReportExportRequest {
   format?: "markdown" | "json";
   include_remediation?: boolean;
 }
+
+export interface ContractSimilarity {
+  contract_name: string;
+  similarity: number;
+  shared_patterns: string[];
+}
+
+export interface FamilyDuplicateRisk {
+  vulnerability_name: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  affected_contracts: string[];
+  description: string;
+  recommendation: string;
+  occurrence_count: number;
+  risk_amplification: string;
+}
+
+export interface FamilyDifferentialRisk {
+  vulnerability_name: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  contract_name: string;
+  description: string;
+  recommendation: string;
+  line: number;
+  missing_in: string[];
+}
+
+export interface ContractFamily {
+  family_id: string;
+  family_name: string;
+  members: string[];
+  similarity_matrix: Record<string, ContractSimilarity[]>;
+  avg_similarity: number;
+  shared_vulnerability_patterns: string[];
+}
+
+export interface ContractFamilyAnalysisResult {
+  id: string;
+  families: ContractFamily[];
+  duplicate_risks: FamilyDuplicateRisk[];
+  differential_risks: FamilyDifferentialRisk[];
+  total_contracts: number;
+  total_families: number;
+  cross_family_risks: number;
+  analysis_summary: string;
+  analyzed_at: string;
+}

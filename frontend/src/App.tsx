@@ -9,6 +9,7 @@ import { ContractTemplateLibrary } from './components/ContractTemplateLibrary';
 import { AuditTaskList } from './components/AuditTaskList';
 import { ProjectDashboard } from './components/ProjectDashboard';
 import { RemediationPlan } from './components/RemediationPlan';
+import { ContractFamilyAnalysis } from './components/ContractFamilyAnalysis';
 import { useAuditStore } from './store/audit';
 
 const App: React.FC = () => {
@@ -69,6 +70,7 @@ const App: React.FC = () => {
       <AuditTaskList />
       <ProjectDashboard />
       <RemediationPlan />
+      <ContractFamilyAnalysis />
     </div>
   );
 };

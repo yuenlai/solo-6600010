@@ -1,9 +1,11 @@
-import re, uuid
+import re, uuid, hashlib
 from datetime import datetime
 from collections import defaultdict
 from ..models.contract import (
     Vulnerability, Severity, AuditResult, CommonIssue, BatchAuditResult, 
-    AuditRequest, ScoreBreakdown, ScoreInterpretation, BatchScoreInterpretation
+    AuditRequest, ScoreBreakdown, ScoreInterpretation, BatchScoreInterpretation,
+    ContractSimilarity, FamilyDuplicateRisk, FamilyDifferentialRisk,
+    ContractFamily, ContractFamilyAnalysisResult
 )
 from ..core.database import custom_rules
 
@@ -231,4 +233,275 @@ def analyze_batch(contracts: list[AuditRequest]) -> BatchAuditResult:
         average_score=round(avg_score, 2),
         audited_at=datetime.now().isoformat(),
         score_interpretation=score_interpretation
+    )
+
+
+def _extract_features(source_code: str) -> set[str]:
+    features = set()
+    func_pattern = r'function\s+(\w+)\s*\('
+    for m in re.finditer(func_pattern, source_code):
+        features.add(f"func:{m.group(1)}")
+    var_pattern = r'(mapping|uint|int|address|bool|string|bytes)\s*(\[\])?\s*(?:public|private|internal)?\s*(\w+)'
+    for m in re.finditer(var_pattern, source_code):
+        features.add(f"var:{m.group(3)}")
+    modifier_pattern = r'modifier\s+(\w+)'
+    for m in re.finditer(modifier_pattern, source_code):
+        features.add(f"mod:{m.group(1)}")
+    event_pattern = r'event\s+(\w+)'
+    for m in re.finditer(event_pattern, source_code):
+        features.add(f"event:{m.group(1)}")
+    contract_pattern = r'contract\s+(\w+)'
+    for m in re.finditer(contract_pattern, source_code):
+        features.add(f"contract:{m.group(1)}")
+    inherit_pattern = r'is\s+(\w+)'
+    for m in re.finditer(inherit_pattern, source_code):
+        features.add(f"inherit:{m.group(1)}")
+    for pi in get_all_patterns():
+        if re.search(pi["pattern"], source_code, re.IGNORECASE):
+            features.add(f"vuln:{pi['name']}")
+    return features
+
+
+def _jaccard_similarity(set_a: set[str], set_b: set[str]) -> float:
+    if not set_a and not set_b:
+        return 1.0
+    if not set_a or not set_b:
+        return 0.0
+    intersection = set_a & set_b
+    union = set_a | set_b
+    return len(intersection) / len(union)
+
+
+def _compute_similarity_matrix(
+    contracts: list[AuditRequest],
+) -> tuple[dict[str, set[str]], dict[str, dict[str, tuple[float, set[str]]]]]:
+    feature_map = {}
+    for c in contracts:
+        feature_map[c.contract_name] = _extract_features(c.source_code)
+    sim_matrix: dict[str, dict[str, tuple[float, set[str]]]] = {}
+    for c1 in contracts:
+        sim_matrix[c1.contract_name] = {}
+        for c2 in contracts:
+            if c1.contract_name == c2.contract_name:
+                continue
+            shared = feature_map[c1.contract_name] & feature_map[c2.contract_name]
+            sim = _jaccard_similarity(feature_map[c1.contract_name], feature_map[c2.contract_name])
+            sim_matrix[c1.contract_name][c2.contract_name] = (sim, shared)
+    return feature_map, sim_matrix
+
+
+SIMILARITY_THRESHOLD = 0.25
+
+
+def _build_families(
+    contracts: list[AuditRequest],
+    sim_matrix: dict[str, dict[str, tuple[float, set[str]]]],
+) -> list[list[str]]:
+    contract_names = [c.contract_name for c in contracts]
+    visited = set()
+    families: list[list[str]] = []
+    for name in contract_names:
+        if name in visited:
+            continue
+        family = [name]
+        visited.add(name)
+        queue = [name]
+        while queue:
+            current = queue.pop(0)
+            for other, (sim, _) in sim_matrix.get(current, {}).items():
+                if other not in visited and sim >= SIMILARITY_THRESHOLD:
+                    family.append(other)
+                    visited.add(other)
+                    queue.append(other)
+        families.append(family)
+    return families
+
+
+RISK_AMPLIFICATION = {
+    "critical": "系统级风险放大：该严重漏洞在多个相似合约中重复出现，可能存在共同的设计缺陷，需全面排查整个合约家族",
+    "high": "高风险扩散：高危漏洞在家族内重复出现，攻击面成倍增加，建议统一修复方案",
+    "medium": "中风险累积：中危漏洞的重复出现降低了家族整体安全性，建议批量修复",
+    "low": "低风险提醒：低危漏洞的重复出现虽不紧急，但仍建议在版本迭代中统一处理",
+    "info": "信息提示：该信息类问题在多份合约中重复出现，可考虑统一规范",
+}
+
+
+def analyze_contract_family(contracts: list[AuditRequest]) -> ContractFamilyAnalysisResult:
+    if len(contracts) < 2:
+        return ContractFamilyAnalysisResult(
+            id=str(uuid.uuid4()),
+            families=[],
+            duplicate_risks=[],
+            differential_risks=[],
+            total_contracts=len(contracts),
+            total_families=0,
+            cross_family_risks=0,
+            analysis_summary="合约数量不足，至少需要2份合约才能进行家族分析",
+            analyzed_at=datetime.now().isoformat()
+        )
+
+    feature_map, sim_matrix = _compute_similarity_matrix(contracts)
+    families_raw = _build_families(contracts, sim_matrix)
+
+    results = [analyze_contract(c.source_code, c.contract_name) for c in contracts]
+    result_map = {r.contract_name: r for r in results}
+
+    families: list[ContractFamily] = []
+    for idx, members in enumerate(families_raw):
+        family_id = str(uuid.uuid4())[:8]
+        if len(members) == 1:
+            family_name = f"独立合约 - {members[0]}"
+        else:
+            family_name = f"合约家族 {idx + 1}"
+
+        similarity_matrix: dict[str, list[ContractSimilarity]] = {}
+        total_sim = 0.0
+        sim_count = 0
+        for m in members:
+            similarity_matrix[m] = []
+            for other in members:
+                if m == other:
+                    continue
+                sim, shared = sim_matrix.get(m, {}).get(other, (0.0, set()))
+                similarity_matrix[m].append(ContractSimilarity(
+                    contract_name=other,
+                    similarity=round(sim, 4),
+                    shared_patterns=sorted(shared)
+                ))
+                total_sim += sim
+                sim_count += 1
+
+        avg_sim = round(total_sim / sim_count, 4) if sim_count > 0 else 1.0
+
+        shared_vuln_patterns = set()
+        if len(members) >= 2:
+            vuln_sets = []
+            for m in members:
+                vuln_names = {v.name for v in result_map[m].vulnerabilities}
+                vuln_sets.append(vuln_names)
+            shared_vuln_patterns = vuln_sets[0]
+            for vs in vuln_sets[1:]:
+                shared_vuln_patterns &= vs
+
+        families.append(ContractFamily(
+            family_id=family_id,
+            family_name=family_name,
+            members=members,
+            similarity_matrix=similarity_matrix,
+            avg_similarity=avg_sim,
+            shared_vulnerability_patterns=sorted(shared_vuln_patterns)
+        ))
+
+    duplicate_risks: list[FamilyDuplicateRisk] = []
+    for family in families:
+        if len(family.members) < 2:
+            continue
+        vuln_by_name: dict[str, dict] = {}
+        for m in family.members:
+            result = result_map[m]
+            seen = set()
+            for v in result.vulnerabilities:
+                if v.name in seen:
+                    continue
+                seen.add(v.name)
+                if v.name not in vuln_by_name:
+                    vuln_by_name[v.name] = {
+                        "contracts": [],
+                        "severity": v.severity,
+                        "description": v.description,
+                        "recommendation": v.recommendation,
+                    }
+                vuln_by_name[v.name]["contracts"].append(m)
+
+        for vname, data in vuln_by_name.items():
+            if len(data["contracts"]) >= 2:
+                sev_str = data["severity"].value if hasattr(data["severity"], 'value') else str(data["severity"])
+                duplicate_risks.append(FamilyDuplicateRisk(
+                    vulnerability_name=vname,
+                    severity=Severity(sev_str),
+                    affected_contracts=data["contracts"],
+                    description=data["description"],
+                    recommendation=data["recommendation"],
+                    occurrence_count=len(data["contracts"]),
+                    risk_amplification=RISK_AMPLIFICATION.get(sev_str, RISK_AMPLIFICATION["medium"])
+                ))
+
+    duplicate_risks.sort(key=lambda x: (SEVERITY_ORDER.get(x.severity.value, 3), -x.occurrence_count))
+
+    differential_risks: list[FamilyDifferentialRisk] = []
+    for family in families:
+        if len(family.members) < 2:
+            continue
+        all_vuln_names = set()
+        for m in family.members:
+            for v in result_map[m].vulnerabilities:
+                all_vuln_names.add(v.name)
+
+        for vname in all_vuln_names:
+            having: dict[str, Vulnerability] = {}
+            not_having: list[str] = []
+            for m in family.members:
+                found = None
+                for v in result_map[m].vulnerabilities:
+                    if v.name == vname:
+                        found = v
+                        break
+                if found:
+                    having[m] = found
+                else:
+                    not_having.append(m)
+
+            if having and not_having:
+                for contract_name, vuln in having.items():
+                    sev_str = vuln.severity.value if hasattr(vuln.severity, 'value') else str(vuln.severity)
+                    differential_risks.append(FamilyDifferentialRisk(
+                        vulnerability_name=vname,
+                        severity=Severity(sev_str),
+                        contract_name=contract_name,
+                        description=vuln.description,
+                        recommendation=vuln.recommendation,
+                        line=vuln.line,
+                        missing_in=not_having
+                    ))
+
+    differential_risks.sort(key=lambda x: (SEVERITY_ORDER.get(x.severity.value, 3), x.contract_name))
+
+    cross_family_vuln_names: set[str] = set()
+    if len(families) >= 2:
+        family_vulns = []
+        for family in families:
+            names = set()
+            for m in family.members:
+                for v in result_map[m].vulnerabilities:
+                    names.add(v.name)
+            family_vulns.append(names)
+        for i in range(len(family_vulns)):
+            for j in range(i + 1, len(family_vulns)):
+                cross_family_vuln_names |= (family_vulns[i] & family_vulns[j])
+    cross_family_risk_count = len(cross_family_vuln_names)
+
+    summary_parts = []
+    summary_parts.append(f"对 {len(contracts)} 份合约进行家族分析，识别出 {len(families)} 个合约家族。")
+    multi_member = [f for f in families if len(f.members) >= 2]
+    if multi_member:
+        summary_parts.append(f"其中 {len(multi_member)} 个家族包含2份及以上相似合约。")
+    if duplicate_risks:
+        crit_dup = sum(1 for d in duplicate_risks if d.severity == Severity.critical)
+        high_dup = sum(1 for d in duplicate_risks if d.severity == Severity.high)
+        summary_parts.append(f"发现 {len(duplicate_risks)} 个重复风险" + (f"，其中严重 {crit_dup} 个、高危 {high_dup} 个" if crit_dup + high_dup > 0 else "") + "。")
+    if differential_risks:
+        summary_parts.append(f"发现 {len(differential_risks)} 个差异风险，表示相似合约中部分合约存在独特漏洞。")
+    if cross_family_risk_count > 0:
+        summary_parts.append(f"发现 {cross_family_risk_count} 个跨家族共有风险，需全局关注。")
+
+    return ContractFamilyAnalysisResult(
+        id=str(uuid.uuid4()),
+        families=families,
+        duplicate_risks=duplicate_risks,
+        differential_risks=differential_risks,
+        total_contracts=len(contracts),
+        total_families=len(families),
+        cross_family_risks=cross_family_risk_count,
+        analysis_summary="".join(summary_parts),
+        analyzed_at=datetime.now().isoformat()
     )

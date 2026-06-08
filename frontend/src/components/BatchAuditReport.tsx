@@ -16,7 +16,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export const BatchAuditReport: React.FC = () => {
-  const { batchResult, submitFalsePositiveFeedback, falsePositiveFeedbacks, fetchFalsePositiveFeedbacks, createRemediationPlan, setShowRemediationPlan, setSelectedRemediationPlan, exportAuditReport, isExportingReport } = useAuditStore();
+  const { batchResult, submitFalsePositiveFeedback, falsePositiveFeedbacks, fetchFalsePositiveFeedbacks, createRemediationPlan, setShowRemediationPlan, setSelectedRemediationPlan, exportAuditReport, isExportingReport, runFamilyAnalysis, isAnalyzingFamily } = useAuditStore();
   const [view, setView] = useState<'ranking' | 'common'>('ranking');
   const [selectedContract, setSelectedContract] = useState<AuditResult | null>(null);
   const [showFeedbackForm, setShowFeedbackForm] = useState<string | null>(null);
@@ -293,6 +293,23 @@ export const BatchAuditReport: React.FC = () => {
           <div><div style={{ fontSize: '24px', fontWeight: 'bold', color: batchResult.average_score >= 80 ? '#2e7d32' : batchResult.average_score >= 50 ? '#e65100' : '#b71c1c' }}>{batchResult.average_score}</div><div style={{ fontSize: '12px', color: '#666' }}>平均分</div></div>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={runFamilyAnalysis}
+            disabled={isAnalyzingFamily}
+            style={{
+              padding: '10px 16px',
+              border: 'none',
+              borderRadius: '6px',
+              background: '#9c27b0',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 500,
+              opacity: isAnalyzingFamily ? 0.6 : 1
+            }}
+          >
+            {isAnalyzingFamily ? '分析中...' : '🧬 家族分析'}
+          </button>
           <button
             onClick={handleGenerateRemediationPlan}
             disabled={generatingPlan}

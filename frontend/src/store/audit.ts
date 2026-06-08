@@ -6,7 +6,7 @@ import {
   AuditTaskList, AuditTaskListCreate, AuditTaskItem, AuditTaskItemCreate,
   AuditTaskItemUpdate, ProjectDashboardData,
   RemediationPlan, RemediationPlanCreate, RemediationItem, RemediationItemUpdate,
-  AuditReport, AuditReportExportRequest
+  AuditReport, AuditReportExportRequest, ContractFamilyAnalysisResult
 } from '../types';
 
 interface AuditState {
@@ -91,6 +91,13 @@ interface AuditState {
   exportAuditReport: (data: AuditReportExportRequest) => Promise<void>;
   fetchAuditReports: () => Promise<void>;
   fetchAuditReport: (reportId: string) => Promise<void>;
+  familyAnalysisResult: ContractFamilyAnalysisResult | null;
+  setFamilyAnalysisResult: (result: ContractFamilyAnalysisResult | null) => void;
+  isAnalyzingFamily: boolean;
+  setIsAnalyzingFamily: (value: boolean) => void;
+  runFamilyAnalysis: () => Promise<void>;
+  showFamilyAnalysis: boolean;
+  setShowFamilyAnalysis: (show: boolean) => void;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -165,6 +172,9 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   auditReports: [],
   selectedAuditReport: null,
   isExportingReport: false,
+  familyAnalysisResult: null,
+  isAnalyzingFamily: false,
+  showFamilyAnalysis: false,
   setMode: (m) => set({ mode: m, result: null, batchResult: null }),
   setSourceCode: (code) => set({ sourceCode: code }),
   setResult: (r) => set({ result: r }),
@@ -424,4 +434,33 @@ export const useAuditStore = create<AuditState>((set, get) => ({
       console.error('Failed to fetch audit report:', e);
     }
   },
+  setFamilyAnalysisResult: (result) => set({ familyAnalysisResult: result }),
+  setIsAnalyzingFamily: (value) => set({ isAnalyzingFamily: value }),
+  runFamilyAnalysis: async () => {
+    const { batchContracts } = get();
+    const valid = batchContracts.filter(c => c.source_code.trim());
+    if (valid.length < 2) return;
+    set({ isAnalyzingFamily: true });
+    try {
+      const res = await fetch('/api/audit/family-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contracts: valid.map(c => ({ source_code: c.source_code, contract_name: c.name || 'Contract' }))
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        set({ familyAnalysisResult: data, showFamilyAnalysis: true });
+      } else {
+        set({ familyAnalysisResult: null });
+      }
+    } catch (e) {
+      console.error('Failed to run family analysis:', e);
+      set({ familyAnalysisResult: null });
+    } finally {
+      set({ isAnalyzingFamily: false });
+    }
+  },
+  setShowFamilyAnalysis: (show) => set({ showFamilyAnalysis: show }),
 }));
