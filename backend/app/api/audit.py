@@ -21,15 +21,17 @@ from ..models.contract import (
     RemediationStatus,
     ReportIssue, ReportConclusion, ReportRemediationItem, ReportRemediationSummary,
     AuditReport, AuditReportExportRequest,
-    ContractFamilyAnalysisResult
+    ContractFamilyAnalysisResult,
+    VersionMigrationAssessmentRequest, VersionMigrationAssessmentResult
 )
 try:
-    from ..services.analyzer import analyze_contract, analyze_batch, analyze_contract_family
+    from ..services.analyzer import analyze_contract, analyze_batch, analyze_contract_family, assess_version_migration
 except ImportError:
     analyze_contract = None
     analyze_batch = None
     analyze_contract_family = None
-from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists, remediation_plans, audit_reports
+    assess_version_migration = None
+from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists, remediation_plans, audit_reports, migration_assessments
 
 class DummyRouter:
     def post(self, path):
@@ -1531,3 +1533,21 @@ async def family_analysis(req: BatchAuditRequest) -> ContractFamilyAnalysisResul
     if not analyze_contract_family:
         raise HTTPException(500, "Family analysis not available")
     return analyze_contract_family(req.contracts)
+
+@router.post("/migration-assessment")
+async def migration_assessment(req: VersionMigrationAssessmentRequest) -> VersionMigrationAssessmentResult:
+    if not assess_version_migration:
+        raise HTTPException(500, "Migration assessment not available")
+    result = assess_version_migration(req.old_source_code, req.new_source_code, req.contract_name)
+    migration_assessments[result.id] = result
+    return result
+
+@router.get("/migration-assessment/{assessment_id}")
+async def get_migration_assessment(assessment_id: str) -> VersionMigrationAssessmentResult:
+    if assessment_id not in migration_assessments:
+        raise HTTPException(404, "Migration assessment not found")
+    return migration_assessments[assessment_id]
+
+@router.get("/migration-assessments")
+async def list_migration_assessments() -> list[VersionMigrationAssessmentResult]:
+    return sorted(migration_assessments.values(), key=lambda x: x.assessed_at, reverse=True)

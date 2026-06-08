@@ -5,7 +5,9 @@ from ..models.contract import (
     Vulnerability, Severity, AuditResult, CommonIssue, BatchAuditResult, 
     AuditRequest, ScoreBreakdown, ScoreInterpretation, BatchScoreInterpretation,
     ContractSimilarity, FamilyDuplicateRisk, FamilyDifferentialRisk,
-    ContractFamily, ContractFamilyAnalysisResult
+    ContractFamily, ContractFamilyAnalysisResult,
+    MigrationVulnChange, MigrationRiskItem, MigrationBenefitItem,
+    VersionMigrationAssessmentResult
 )
 from ..core.database import custom_rules
 
@@ -504,4 +506,227 @@ def analyze_contract_family(contracts: list[AuditRequest]) -> ContractFamilyAnal
         cross_family_risks=cross_family_risk_count,
         analysis_summary="".join(summary_parts),
         analyzed_at=datetime.now().isoformat()
+    )
+
+
+def _compute_code_diff_summary(old_code: str, new_code: str) -> str:
+    old_lines = set(l.strip() for l in old_code.splitlines() if l.strip())
+    new_lines = set(l.strip() for l in new_code.splitlines() if l.strip())
+    added = new_lines - old_lines
+    removed = old_lines - new_lines
+    parts = []
+    if added:
+        parts.append(f"新增 {len(added)} 行代码")
+    if removed:
+        parts.append(f"删除 {len(removed)} 行代码")
+    if not parts:
+        return "代码无变化"
+    return "，".join(parts)
+
+
+def assess_version_migration(
+    old_source_code: str,
+    new_source_code: str,
+    contract_name: str
+) -> VersionMigrationAssessmentResult:
+    old_result = analyze_contract(old_source_code, contract_name)
+    new_result = analyze_contract(new_source_code, contract_name)
+
+    old_vuln_names = {v.name for v in old_result.vulnerabilities}
+    new_vuln_names = {v.name for v in new_result.vulnerabilities}
+
+    resolved_names = old_vuln_names - new_vuln_names
+    added_names = new_vuln_names - old_vuln_names
+    persistent_names = old_vuln_names & new_vuln_names
+
+    resolved: list[MigrationVulnChange] = []
+    for v in old_result.vulnerabilities:
+        if v.name in resolved_names:
+            resolved.append(MigrationVulnChange(
+                vulnerability_name=v.name,
+                severity=v.severity,
+                change_type="resolved",
+                description=v.description,
+                recommendation=v.recommendation,
+                line=v.line
+            ))
+    seen_r = set()
+    unique_resolved = []
+    for r in resolved:
+        if r.vulnerability_name not in seen_r:
+            seen_r.add(r.vulnerability_name)
+            unique_resolved.append(r)
+    resolved = unique_resolved
+
+    new_vulns: list[MigrationVulnChange] = []
+    for v in new_result.vulnerabilities:
+        if v.name in added_names:
+            new_vulns.append(MigrationVulnChange(
+                vulnerability_name=v.name,
+                severity=v.severity,
+                change_type="added",
+                description=v.description,
+                recommendation=v.recommendation,
+                line=v.line
+            ))
+    seen_n = set()
+    unique_new = []
+    for n in new_vulns:
+        if n.vulnerability_name not in seen_n:
+            seen_n.add(n.vulnerability_name)
+            unique_new.append(n)
+    new_vulns = unique_new
+
+    persistent: list[MigrationVulnChange] = []
+    for v in old_result.vulnerabilities:
+        if v.name in persistent_names:
+            persistent.append(MigrationVulnChange(
+                vulnerability_name=v.name,
+                severity=v.severity,
+                change_type="persistent",
+                description=v.description,
+                recommendation=v.recommendation,
+                line=v.line
+            ))
+    seen_p = set()
+    unique_persist = []
+    for p in persistent:
+        if p.vulnerability_name not in seen_p:
+            seen_p.add(p.vulnerability_name)
+            unique_persist.append(p)
+    persistent = unique_persist
+
+    risks: list[MigrationRiskItem] = []
+    for v in new_vulns:
+        sev_str = v.severity.value if hasattr(v.severity, 'value') else str(v.severity)
+        if sev_str in ['critical', 'high']:
+            risks.append(MigrationRiskItem(
+                risk_type="new_critical_vulnerability",
+                severity=v.severity,
+                description=f"升级后引入新的高危漏洞：{v.vulnerability_name}",
+                impact="可能导致资金损失或权限被绕过，建议在升级前修复",
+                recommendation=v.recommendation
+            ))
+
+    crit_persist = [p for p in persistent if p.severity in [Severity.critical, Severity.high]]
+    if crit_persist:
+        risks.append(MigrationRiskItem(
+            risk_type="unresolved_critical",
+            severity=Severity.high,
+            description=f"升级后仍有 {len(crit_persist)} 个高危漏洞未解决：{', '.join(p.vulnerability_name for p in crit_persist)}",
+            impact="这些高危漏洞在升级后依然存在，持续威胁合约安全",
+            recommendation="建议在升级中同步修复这些持续存在的高危漏洞"
+        ))
+
+    if new_result.score < old_result.score and (new_result.score - old_result.score) < -20:
+        risks.append(MigrationRiskItem(
+            risk_type="score_degradation",
+            severity=Severity.medium,
+            description=f"升级后安全评分大幅下降（从 {old_result.score} 降至 {new_result.score}）",
+            impact="安全性显著降低，建议重新审视升级变更",
+            recommendation="回退升级并重新评估变更内容，确保不会引入新的安全问题"
+        ))
+
+    old_funcs = set(re.findall(r'function\s+(\w+)', old_source_code))
+    new_funcs = set(re.findall(r'function\s+(\w+)', new_source_code))
+    removed_funcs = old_funcs - new_funcs
+    if removed_funcs:
+        risks.append(MigrationRiskItem(
+            risk_type="interface_change",
+            severity=Severity.medium,
+            description=f"升级后移除了以下函数：{', '.join(removed_funcs)}",
+            impact="可能导致依赖这些函数的外部合约或前端调用失败",
+            recommendation="确认移除的函数没有外部依赖，或提供兼容接口"
+        ))
+
+    benefits: list[MigrationBenefitItem] = []
+    for v in resolved:
+        sev_str = v.severity.value if hasattr(v.severity, 'value') else str(v.severity)
+        if sev_str in ['critical', 'high']:
+            benefits.append(MigrationBenefitItem(
+                benefit_type="critical_fix",
+                description=f"修复了高危漏洞：{v.vulnerability_name}",
+                impact="显著提升合约安全性，降低资金风险"
+            ))
+        else:
+            benefits.append(MigrationBenefitItem(
+                benefit_type="vulnerability_fix",
+                description=f"修复了漏洞：{v.vulnerability_name}",
+                impact="提升了合约整体安全性"
+            ))
+
+    if new_result.score > old_result.score:
+        benefits.append(MigrationBenefitItem(
+            benefit_type="score_improvement",
+            description=f"安全评分从 {old_result.score} 提升至 {new_result.score}（+{new_result.score - old_result.score}分）",
+            impact="整体安全性得到提升"
+        ))
+
+    added_funcs = new_funcs - old_funcs
+    if added_funcs:
+        benefits.append(MigrationBenefitItem(
+            benefit_type="new_functionality",
+            description=f"新增了函数：{', '.join(added_funcs)}",
+            impact="扩展了合约功能，但需确保新函数的安全性"
+        ))
+
+    if not persistent:
+        benefits.append(MigrationBenefitItem(
+            benefit_type="clean_migration",
+            description="旧版本的所有漏洞在升级后均已修复",
+            impact="升级效果显著，安全性大幅提升"
+        ))
+
+    score_change = new_result.score - old_result.score
+    vuln_change = len(new_result.vulnerabilities) - len(old_result.vulnerabilities)
+
+    crit_new = sum(1 for v in new_vulns if v.severity in [Severity.critical])
+    high_new = sum(1 for v in new_vulns if v.severity in [Severity.high])
+    crit_resolved = sum(1 for v in resolved if v.severity in [Severity.critical])
+    high_resolved = sum(1 for v in resolved if v.severity in [Severity.high])
+
+    migration_score = 50.0
+    migration_score += crit_resolved * 15
+    migration_score += high_resolved * 10
+    migration_score += len(resolved) * 5
+    migration_score -= crit_new * 20
+    migration_score -= high_new * 15
+    migration_score += score_change * 0.5
+    migration_score -= len(risks) * 5
+    migration_score = max(0, min(100, migration_score))
+
+    if migration_score >= 80:
+        risk_level = "低风险"
+        overall_recommendation = "升级收益明显，风险较低，建议执行版本迁移。"
+    elif migration_score >= 60:
+        risk_level = "中风险"
+        overall_recommendation = "升级有一定收益，但存在部分风险，建议修复新增漏洞后再执行迁移。"
+    elif migration_score >= 40:
+        risk_level = "高风险"
+        overall_recommendation = "升级风险较高，引入了新的安全问题，建议谨慎评估后再决定是否迁移。"
+    else:
+        risk_level = "极高风险"
+        overall_recommendation = "升级风险极高，安全性显著下降，强烈建议暂缓迁移并重新审查升级方案。"
+
+    code_diff_summary = _compute_code_diff_summary(old_source_code, new_source_code)
+
+    return VersionMigrationAssessmentResult(
+        id=str(uuid.uuid4()),
+        contract_name=contract_name,
+        old_score=old_result.score,
+        new_score=new_result.score,
+        score_change=score_change,
+        old_vulnerability_count=len(old_result.vulnerabilities),
+        new_vulnerability_count=len(new_result.vulnerabilities),
+        vulnerability_change=vuln_change,
+        resolved_vulnerabilities=resolved,
+        new_vulnerabilities=new_vulns,
+        persistent_vulnerabilities=persistent,
+        risks=risks,
+        benefits=benefits,
+        overall_recommendation=overall_recommendation,
+        risk_level=risk_level,
+        migration_score=round(migration_score, 1),
+        code_diff_summary=code_diff_summary,
+        assessed_at=datetime.now().isoformat()
     )

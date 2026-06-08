@@ -10,6 +10,7 @@ import { AuditTaskList } from './components/AuditTaskList';
 import { ProjectDashboard } from './components/ProjectDashboard';
 import { RemediationPlan } from './components/RemediationPlan';
 import { ContractFamilyAnalysis } from './components/ContractFamilyAnalysis';
+import { VersionMigrationAssessment } from './components/VersionMigrationAssessment';
 import { useAuditStore } from './store/audit';
 
 const App: React.FC = () => {
@@ -71,6 +72,7 @@ const App: React.FC = () => {
       <ProjectDashboard />
       <RemediationPlan />
       <ContractFamilyAnalysis />
+      <VersionMigrationAssessment />
     </div>
   );
 };

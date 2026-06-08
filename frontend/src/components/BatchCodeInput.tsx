@@ -3,16 +3,29 @@ import { useAuditStore } from '../store/audit';
 import axios from 'axios';
 
 export const BatchCodeInput: React.FC = () => {
-  const { batchContracts, addBatchContract, removeBatchContract, updateBatchContract, setBatchResult, setAnalyzing, isAnalyzing, setShowTemplateLibrary, runFamilyAnalysis, isAnalyzingFamily } = useAuditStore();
+  const { batchContracts, addBatchContract, removeBatchContract, updateBatchContract, setBatchResult, setAnalyzing, isAnalyzing, setShowTemplateLibrary, runFamilyAnalysis, isAnalyzingFamily, runMigrationAssessment, isAssessingMigration } = useAuditStore();
   const [activeTab, setActiveTab] = useState<string>(batchContracts[0]?.id || '');
+  const [showMigrationPicker, setShowMigrationPicker] = useState(false);
+  const [migrationOldIdx, setMigrationOldIdx] = useState(0);
+  const [migrationNewIdx, setMigrationNewIdx] = useState(1);
+
+  const valid = batchContracts.filter(c => c.source_code.trim());
+
+  const handleRunMigrationAssessment = () => {
+    const oldContract = valid[migrationOldIdx];
+    const newContract = valid[migrationNewIdx];
+    if (!oldContract || !newContract || migrationOldIdx === migrationNewIdx) return;
+    runMigrationAssessment(oldContract.source_code, newContract.source_code, newContract.name || 'Contract');
+    setShowMigrationPicker(false);
+  };
 
   const runBatchAudit = async () => {
-    const valid = batchContracts.filter(c => c.source_code.trim());
-    if (valid.length < 2) return;
+    const validContracts = batchContracts.filter(c => c.source_code.trim());
+    if (validContracts.length < 2) return;
     setAnalyzing(true);
     try {
       const { data } = await axios.post('/api/audit/batch', {
-        contracts: valid.map(c => ({ source_code: c.source_code, contract_name: c.name || 'Contract' }))
+        contracts: validContracts.map(c => ({ source_code: c.source_code, contract_name: c.name || 'Contract' }))
       });
       setBatchResult(data);
     } catch { setBatchResult(null); }
@@ -28,10 +41,34 @@ export const BatchCodeInput: React.FC = () => {
         <button onClick={runFamilyAnalysis} disabled={isAnalyzingFamily || batchContracts.filter(c => c.source_code.trim()).length < 2} style={{ padding: '4px 12px', borderRadius: '4px', border: '1px solid #555', background: 'transparent', color: '#ccc', cursor: 'pointer', fontSize: '12px', opacity: (isAnalyzingFamily || batchContracts.filter(c => c.source_code.trim()).length < 2) ? 0.5 : 1 }}>
           {isAnalyzingFamily ? '分析中...' : '🧬 家族分析'}
         </button>
+        <button onClick={() => setShowMigrationPicker(!showMigrationPicker)} disabled={valid.length < 2} style={{ padding: '4px 12px', borderRadius: '4px', border: '1px solid #555', background: 'transparent', color: '#ccc', cursor: 'pointer', fontSize: '12px', opacity: (valid.length < 2 || isAssessingMigration) ? 0.5 : 1 }}>
+          {isAssessingMigration ? '评估中...' : '🔄 迁移评估'}
+        </button>
         <button onClick={runBatchAudit} disabled={isAnalyzing || batchContracts.filter(c => c.source_code.trim()).length < 2} style={{ padding: '6px 20px', borderRadius: '4px', border: 'none', background: '#e53935', color: '#fff', cursor: 'pointer', fontWeight: 600, marginLeft: 'auto', opacity: (isAnalyzing || batchContracts.filter(c => c.source_code.trim()).length < 2) ? 0.5 : 1 }}>
           {isAnalyzing ? '分析中...' : '开始批量审计'}
         </button>
       </div>
+      {showMigrationPicker && valid.length >= 2 && (
+        <div style={{ padding: '10px 16px', background: '#252526', borderBottom: '1px solid #333', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '12px', color: '#aaa' }}>🔄 版本迁移评估：选择旧版与新版合约</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', color: '#888' }}>旧版本</span>
+            <select value={migrationOldIdx} onChange={e => setMigrationOldIdx(Number(e.target.value))} style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #555', background: '#1e1e1e', color: '#d4d4d4', fontSize: '12px' }}>
+              {valid.map((c, i) => <option key={c.id} value={i} disabled={i === migrationNewIdx}>{c.name || `Contract ${i + 1}`}</option>)}
+            </select>
+          </div>
+          <span style={{ fontSize: '14px', color: '#666' }}>→</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', color: '#888' }}>新版本</span>
+            <select value={migrationNewIdx} onChange={e => setMigrationNewIdx(Number(e.target.value))} style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #555', background: '#1e1e1e', color: '#d4d4d4', fontSize: '12px' }}>
+              {valid.map((c, i) => <option key={c.id} value={i} disabled={i === migrationOldIdx}>{c.name || `Contract ${i + 1}`}</option>)}
+            </select>
+          </div>
+          <button onClick={handleRunMigrationAssessment} disabled={migrationOldIdx === migrationNewIdx || isAssessingMigration} style={{ padding: '4px 14px', borderRadius: '4px', border: 'none', background: '#ff9800', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '12px', opacity: (migrationOldIdx === migrationNewIdx || isAssessingMigration) ? 0.5 : 1 }}>
+            {isAssessingMigration ? '评估中...' : '开始评估'}
+          </button>
+        </div>
+      )}
       <div style={{ display: 'flex', background: '#252526', borderBottom: '1px solid #333', overflowX: 'auto' }}>
         {batchContracts.map((c, i) => (
           <div key={c.id} onClick={() => setActiveTab(c.id)} style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', cursor: 'pointer', borderRight: '1px solid #333', background: activeTab === c.id ? '#1e1e1e' : 'transparent', minWidth: '120px' }}>

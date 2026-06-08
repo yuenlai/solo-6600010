@@ -352,6 +352,51 @@ if _HAS_PYDANTIC:
         analysis_summary: str
         analyzed_at: str
 
+    class MigrationVulnChange(BaseModel):
+        vulnerability_name: str
+        severity: Severity
+        change_type: str
+        description: str
+        recommendation: str
+        line: int | None = None
+
+    class MigrationRiskItem(BaseModel):
+        risk_type: str
+        severity: Severity
+        description: str
+        impact: str
+        recommendation: str
+
+    class MigrationBenefitItem(BaseModel):
+        benefit_type: str
+        description: str
+        impact: str
+
+    class VersionMigrationAssessmentRequest(BaseModel):
+        old_source_code: str
+        new_source_code: str
+        contract_name: str = "Contract"
+
+    class VersionMigrationAssessmentResult(BaseModel):
+        id: str
+        contract_name: str
+        old_score: float
+        new_score: float
+        score_change: float
+        old_vulnerability_count: int
+        new_vulnerability_count: int
+        vulnerability_change: int
+        resolved_vulnerabilities: list[MigrationVulnChange]
+        new_vulnerabilities: list[MigrationVulnChange]
+        persistent_vulnerabilities: list[MigrationVulnChange]
+        risks: list[MigrationRiskItem]
+        benefits: list[MigrationBenefitItem]
+        overall_recommendation: str
+        risk_level: str
+        migration_score: float
+        code_diff_summary: str
+        assessed_at: str
+
 else:
     class Vulnerability:
         pass
@@ -454,4 +499,14 @@ else:
     class ContractFamily:
         pass
     class ContractFamilyAnalysisResult:
+        pass
+    class MigrationVulnChange:
+        pass
+    class MigrationRiskItem:
+        pass
+    class MigrationBenefitItem:
+        pass
+    class VersionMigrationAssessmentRequest:
+        pass
+    class VersionMigrationAssessmentResult:
         pass

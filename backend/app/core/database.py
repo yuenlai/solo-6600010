@@ -8,6 +8,7 @@ false_positive_feedbacks = {}
 audit_task_lists = {}
 remediation_plans = {}
 audit_reports = {}
+migration_assessments = {}
 
 __all__ = [
     'audit_results',
@@ -19,5 +20,6 @@ __all__ = [
     'false_positive_feedbacks',
     'audit_task_lists',
     'remediation_plans',
-    'audit_reports'
+    'audit_reports',
+    'migration_assessments'
 ]

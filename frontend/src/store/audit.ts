@@ -6,7 +6,8 @@ import {
   AuditTaskList, AuditTaskListCreate, AuditTaskItem, AuditTaskItemCreate,
   AuditTaskItemUpdate, ProjectDashboardData,
   RemediationPlan, RemediationPlanCreate, RemediationItem, RemediationItemUpdate,
-  AuditReport, AuditReportExportRequest, ContractFamilyAnalysisResult
+  AuditReport, AuditReportExportRequest, ContractFamilyAnalysisResult,
+  VersionMigrationAssessmentResult
 } from '../types';
 
 interface AuditState {
@@ -98,6 +99,13 @@ interface AuditState {
   runFamilyAnalysis: () => Promise<void>;
   showFamilyAnalysis: boolean;
   setShowFamilyAnalysis: (show: boolean) => void;
+  migrationAssessmentResult: VersionMigrationAssessmentResult | null;
+  setMigrationAssessmentResult: (result: VersionMigrationAssessmentResult | null) => void;
+  isAssessingMigration: boolean;
+  setIsAssessingMigration: (value: boolean) => void;
+  showMigrationAssessment: boolean;
+  setShowMigrationAssessment: (show: boolean) => void;
+  runMigrationAssessment: (oldSourceCode: string, newSourceCode: string, contractName: string) => Promise<void>;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -175,6 +183,9 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   familyAnalysisResult: null,
   isAnalyzingFamily: false,
   showFamilyAnalysis: false,
+  migrationAssessmentResult: null,
+  isAssessingMigration: false,
+  showMigrationAssessment: false,
   setMode: (m) => set({ mode: m, result: null, batchResult: null }),
   setSourceCode: (code) => set({ sourceCode: code }),
   setResult: (r) => set({ result: r }),
@@ -463,4 +474,32 @@ export const useAuditStore = create<AuditState>((set, get) => ({
     }
   },
   setShowFamilyAnalysis: (show) => set({ showFamilyAnalysis: show }),
+  setMigrationAssessmentResult: (result) => set({ migrationAssessmentResult: result }),
+  setIsAssessingMigration: (value) => set({ isAssessingMigration: value }),
+  setShowMigrationAssessment: (show) => set({ showMigrationAssessment: show }),
+  runMigrationAssessment: async (oldSourceCode, newSourceCode, contractName) => {
+    set({ isAssessingMigration: true });
+    try {
+      const res = await fetch('/api/audit/migration-assessment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          old_source_code: oldSourceCode,
+          new_source_code: newSourceCode,
+          contract_name: contractName
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        set({ migrationAssessmentResult: data, showMigrationAssessment: true });
+      } else {
+        set({ migrationAssessmentResult: null });
+      }
+    } catch (e) {
+      console.error('Failed to run migration assessment:', e);
+      set({ migrationAssessmentResult: null });
+    } finally {
+      set({ isAssessingMigration: false });
+    }
+  },
 }));

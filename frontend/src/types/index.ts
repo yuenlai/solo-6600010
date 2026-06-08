@@ -374,3 +374,53 @@ export interface ContractFamilyAnalysisResult {
   analysis_summary: string;
   analyzed_at: string;
 }
+
+export interface MigrationVulnChange {
+  vulnerability_name: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  change_type: "resolved" | "added" | "persistent";
+  description: string;
+  recommendation: string;
+  line?: number;
+}
+
+export interface MigrationRiskItem {
+  risk_type: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  description: string;
+  impact: string;
+  recommendation: string;
+}
+
+export interface MigrationBenefitItem {
+  benefit_type: string;
+  description: string;
+  impact: string;
+}
+
+export interface VersionMigrationAssessmentRequest {
+  old_source_code: string;
+  new_source_code: string;
+  contract_name: string;
+}
+
+export interface VersionMigrationAssessmentResult {
+  id: string;
+  contract_name: string;
+  old_score: number;
+  new_score: number;
+  score_change: number;
+  old_vulnerability_count: number;
+  new_vulnerability_count: number;
+  vulnerability_change: number;
+  resolved_vulnerabilities: MigrationVulnChange[];
+  new_vulnerabilities: MigrationVulnChange[];
+  persistent_vulnerabilities: MigrationVulnChange[];
+  risks: MigrationRiskItem[];
+  benefits: MigrationBenefitItem[];
+  overall_recommendation: string;
+  risk_level: string;
+  migration_score: number;
+  code_diff_summary: string;
+  assessed_at: string;
+}
