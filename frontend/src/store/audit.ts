@@ -8,7 +8,8 @@ import {
   RemediationPlan, RemediationPlanCreate, RemediationItem, RemediationItemUpdate,
   AuditReport, AuditReportExportRequest, ContractFamilyAnalysisResult,
   VersionMigrationAssessmentResult, RiskSubscription, RiskSubscriptionCreate,
-  SubscriptionDashboard, ReReviewRequest, ReReviewResult
+  SubscriptionDashboard, ReReviewRequest, ReReviewResult,
+  AuditNote, AuditNoteCreate, AuditNoteRole
 } from '../types';
 
 interface AuditState {
@@ -129,6 +130,14 @@ interface AuditState {
   setIsSubmittingReReview: (value: boolean) => void;
   submitReReview: (data: ReReviewRequest) => Promise<ReReviewResult>;
   fetchReReviewResults: () => Promise<void>;
+  showAuditNotes: boolean;
+  setShowAuditNotes: (show: boolean) => void;
+  auditNotes: AuditNote[];
+  setAuditNotes: (notes: AuditNote[]) => void;
+  fetchAuditNotes: (auditId?: string, contractName?: string) => Promise<void>;
+  createAuditNote: (data: AuditNoteCreate) => Promise<AuditNote>;
+  updateAuditNote: (noteId: string, data: AuditNoteCreate) => Promise<AuditNote>;
+  deleteAuditNote: (noteId: string) => Promise<void>;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -216,6 +225,8 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   reReviewResults: [],
   selectedReReviewResult: null,
   isSubmittingReReview: false,
+  showAuditNotes: false,
+  auditNotes: [],
   setMode: (m) => set({ mode: m, result: null, batchResult: null }),
   setSourceCode: (code) => set({ sourceCode: code }),
   setResult: (r) => set({ result: r }),
@@ -618,5 +629,46 @@ export const useAuditStore = create<AuditState>((set, get) => ({
     } catch (e) {
       console.error('Failed to fetch re-review results:', e);
     }
+  },
+  setShowAuditNotes: (show) => set({ showAuditNotes: show }),
+  setAuditNotes: (notes) => set({ auditNotes: notes }),
+  fetchAuditNotes: async (auditId, contractName) => {
+    try {
+      const params = new URLSearchParams();
+      if (auditId) params.set('audit_id', auditId);
+      if (contractName) params.set('contract_name', contractName);
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const res = await fetch(`/api/audit/notes${query}`);
+      if (res.ok) {
+        const data = await res.json();
+        get().setAuditNotes(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch audit notes:', e);
+    }
+  },
+  createAuditNote: async (data) => {
+    const res = await fetch('/api/audit/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const note = await res.json();
+    get().setAuditNotes([note, ...get().auditNotes]);
+    return note;
+  },
+  updateAuditNote: async (noteId, data) => {
+    const res = await fetch(`/api/audit/notes/${noteId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const note = await res.json();
+    get().setAuditNotes(get().auditNotes.map(n => n.id === noteId ? note : n));
+    return note;
+  },
+  deleteAuditNote: async (noteId) => {
+    await fetch(`/api/audit/notes/${noteId}`, { method: 'DELETE' });
+    get().setAuditNotes(get().auditNotes.filter(n => n.id !== noteId));
   },
 }));

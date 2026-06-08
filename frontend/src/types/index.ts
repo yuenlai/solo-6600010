@@ -510,3 +510,24 @@ export interface ReReviewResult {
   remediation_summary: string | null;
   created_at: string;
 }
+
+export type AuditNoteRole = "developer" | "auditor" | "owner";
+
+export interface AuditNote {
+  id: string;
+  audit_id: string;
+  contract_name: string;
+  role: AuditNoteRole;
+  author: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuditNoteCreate {
+  audit_id: string;
+  contract_name: string;
+  role: AuditNoteRole;
+  author: string;
+  content: string;
+}

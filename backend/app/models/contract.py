@@ -480,6 +480,28 @@ if _HAS_PYDANTIC:
         remediation_summary: str | None = None
         created_at: str
 
+    class AuditNoteRole(str, Enum):
+        developer = "developer"
+        auditor = "auditor"
+        owner = "owner"
+
+    class AuditNote(BaseModel):
+        id: str
+        audit_id: str
+        contract_name: str
+        role: AuditNoteRole
+        author: str
+        content: str
+        created_at: str
+        updated_at: str
+
+    class AuditNoteCreate(BaseModel):
+        audit_id: str
+        contract_name: str
+        role: AuditNoteRole
+        author: str
+        content: str
+
 else:
     class Vulnerability:
         pass
@@ -612,4 +634,12 @@ else:
     class ReReviewRequest:
         pass
     class ReReviewResult:
+        pass
+    class AuditNoteRole(str, Enum):
+        developer = "developer"
+        auditor = "auditor"
+        owner = "owner"
+    class AuditNote:
+        pass
+    class AuditNoteCreate:
         pass

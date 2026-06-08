@@ -24,7 +24,8 @@ from ..models.contract import (
     ContractFamilyAnalysisResult,
     VersionMigrationAssessmentRequest, VersionMigrationAssessmentResult,
     RiskSubscription, RiskSubscriptionCreate, SubscriptionMatch, SubscriptionTrendDataPoint, SubscriptionDashboard,
-    VulnDiffItem, ReReviewRequest, ReReviewResult
+    VulnDiffItem, ReReviewRequest, ReReviewResult,
+    AuditNoteRole, AuditNote, AuditNoteCreate
 )
 try:
     from ..services.analyzer import analyze_contract, analyze_batch, analyze_contract_family, assess_version_migration
@@ -33,7 +34,7 @@ except ImportError:
     analyze_batch = None
     analyze_contract_family = None
     assess_version_migration = None
-from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists, remediation_plans, audit_reports, migration_assessments, risk_subscriptions, re_review_results
+from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists, remediation_plans, audit_reports, migration_assessments, risk_subscriptions, re_review_results, audit_notes
 
 class DummyRouter:
     def post(self, path):
@@ -1945,3 +1946,71 @@ async def get_re_review(review_id: str) -> ReReviewResult:
     if review_id not in re_review_results:
         raise HTTPException(404, "Re-review result not found")
     return re_review_results[review_id]
+
+
+@router.get("/notes")
+async def list_audit_notes(
+    audit_id: str | None = None,
+    contract_name: str | None = None,
+    role: AuditNoteRole | None = None
+) -> list[AuditNote]:
+    result = list(audit_notes.values())
+    if audit_id:
+        result = [n for n in result if n.audit_id == audit_id]
+    if contract_name:
+        result = [n for n in result if n.contract_name == contract_name]
+    if role:
+        result = [n for n in result if n.role == role]
+    return sorted(result, key=lambda n: n.created_at, reverse=True)
+
+
+@router.post("/notes")
+async def create_audit_note(req: AuditNoteCreate) -> AuditNote:
+    note_id = str(uuid.uuid4())[:8]
+    now = datetime.now().isoformat()
+    note = AuditNote(
+        id=note_id,
+        audit_id=req.audit_id,
+        contract_name=req.contract_name,
+        role=req.role,
+        author=req.author,
+        content=req.content,
+        created_at=now,
+        updated_at=now
+    )
+    audit_notes[note_id] = note
+    return note
+
+
+@router.get("/notes/{note_id}")
+async def get_audit_note(note_id: str) -> AuditNote:
+    if note_id not in audit_notes:
+        raise HTTPException(404, "Audit note not found")
+    return audit_notes[note_id]
+
+
+@router.put("/notes/{note_id}")
+async def update_audit_note(note_id: str, req: AuditNoteCreate) -> AuditNote:
+    if note_id not in audit_notes:
+        raise HTTPException(404, "Audit note not found")
+    existing = audit_notes[note_id]
+    updated = AuditNote(
+        id=note_id,
+        audit_id=req.audit_id,
+        contract_name=req.contract_name,
+        role=req.role,
+        author=req.author,
+        content=req.content,
+        created_at=existing.created_at,
+        updated_at=datetime.now().isoformat()
+    )
+    audit_notes[note_id] = updated
+    return updated
+
+
+@router.delete("/notes/{note_id}")
+async def delete_audit_note(note_id: str):
+    if note_id not in audit_notes:
+        raise HTTPException(404, "Audit note not found")
+    del audit_notes[note_id]
+    return {"message": "Audit note deleted"}

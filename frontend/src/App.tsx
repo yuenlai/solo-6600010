@@ -13,10 +13,11 @@ import { ContractFamilyAnalysis } from './components/ContractFamilyAnalysis';
 import { VersionMigrationAssessment } from './components/VersionMigrationAssessment';
 import { RuleSubscription } from './components/RuleSubscription';
 import { ReReviewApplication } from './components/ReReviewApplication';
+import { AuditNotes } from './components/AuditNotes';
 import { useAuditStore } from './store/audit';
 
 const App: React.FC = () => {
-  const { mode, setMode, setShowRuleManager, customRules, setShowHistory, setShowTemplateLibrary, setShowTaskList, auditTaskLists, setShowDashboard, setShowRemediationPlan, remediationPlans, riskSubscriptions, setShowRuleSubscription, reReviewResults, setShowReReview } = useAuditStore();
+  const { mode, setMode, setShowRuleManager, customRules, setShowHistory, setShowTemplateLibrary, setShowTaskList, auditTaskLists, setShowDashboard, setShowRemediationPlan, remediationPlans, riskSubscriptions, setShowRuleSubscription, reReviewResults, setShowReReview, setShowAuditNotes, auditNotes } = useAuditStore();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', background: '#2d2d2d', borderBottom: '1px solid #444', gap: '16px' }}>
@@ -62,6 +63,12 @@ const App: React.FC = () => {
           }}>
             🔍 复审申请 {reReviewResults.length > 0 && `(${reReviewResults.length})`}
           </button>
+          <button onClick={() => setShowAuditNotes(true)} style={{
+            padding: '6px 16px', border: '1px solid #666', borderRadius: '4px',
+            cursor: 'pointer', fontWeight: 500, background: 'transparent', color: '#ccc'
+          }}>
+            📝 审计备注 {auditNotes.length > 0 && `(${auditNotes.length})`}
+          </button>
           <button onClick={() => setShowRuleSubscription(true)} style={{
             padding: '6px 16px', border: '1px solid #666', borderRadius: '4px',
             cursor: 'pointer', fontWeight: 500, background: 'transparent', color: '#ccc'
@@ -89,6 +96,7 @@ const App: React.FC = () => {
       <VersionMigrationAssessment />
       <RuleSubscription />
       <ReReviewApplication />
+      <AuditNotes />
     </div>
   );
 };
