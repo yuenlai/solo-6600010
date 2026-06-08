@@ -7,7 +7,8 @@ import {
   AuditTaskItemUpdate, ProjectDashboardData,
   RemediationPlan, RemediationPlanCreate, RemediationItem, RemediationItemUpdate,
   AuditReport, AuditReportExportRequest, ContractFamilyAnalysisResult,
-  VersionMigrationAssessmentResult
+  VersionMigrationAssessmentResult, RiskSubscription, RiskSubscriptionCreate,
+  SubscriptionDashboard
 } from '../types';
 
 interface AuditState {
@@ -106,6 +107,18 @@ interface AuditState {
   showMigrationAssessment: boolean;
   setShowMigrationAssessment: (show: boolean) => void;
   runMigrationAssessment: (oldSourceCode: string, newSourceCode: string, contractName: string) => Promise<void>;
+  showRuleSubscription: boolean;
+  setShowRuleSubscription: (show: boolean) => void;
+  riskSubscriptions: RiskSubscription[];
+  setRiskSubscriptions: (subs: RiskSubscription[]) => void;
+  subscriptionDashboards: SubscriptionDashboard[];
+  setSubscriptionDashboards: (dashboards: SubscriptionDashboard[]) => void;
+  fetchSubscriptions: () => Promise<void>;
+  createSubscription: (data: RiskSubscriptionCreate) => Promise<RiskSubscription>;
+  updateSubscription: (subId: string, data: RiskSubscriptionCreate) => Promise<RiskSubscription>;
+  deleteSubscription: (subId: string) => Promise<void>;
+  fetchSubscriptionDashboards: () => Promise<void>;
+  toggleSubscriptionEnabled: (subId: string) => Promise<void>;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -186,6 +199,9 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   migrationAssessmentResult: null,
   isAssessingMigration: false,
   showMigrationAssessment: false,
+  showRuleSubscription: false,
+  riskSubscriptions: [],
+  subscriptionDashboards: [],
   setMode: (m) => set({ mode: m, result: null, batchResult: null }),
   setSourceCode: (code) => set({ sourceCode: code }),
   setResult: (r) => set({ result: r }),
@@ -501,5 +517,66 @@ export const useAuditStore = create<AuditState>((set, get) => ({
     } finally {
       set({ isAssessingMigration: false });
     }
+  },
+  setShowRuleSubscription: (show) => set({ showRuleSubscription: show }),
+  setRiskSubscriptions: (subs) => set({ riskSubscriptions: subs }),
+  setSubscriptionDashboards: (dashboards) => set({ subscriptionDashboards: dashboards }),
+  fetchSubscriptions: async () => {
+    try {
+      const res = await fetch('/api/audit/subscriptions');
+      if (res.ok) {
+        const data = await res.json();
+        get().setRiskSubscriptions(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch subscriptions:', e);
+    }
+  },
+  createSubscription: async (data) => {
+    const res = await fetch('/api/audit/subscriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const sub = await res.json();
+    get().setRiskSubscriptions([sub, ...get().riskSubscriptions]);
+    return sub;
+  },
+  updateSubscription: async (subId, data) => {
+    const res = await fetch(`/api/audit/subscriptions/${subId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const sub = await res.json();
+    get().setRiskSubscriptions(get().riskSubscriptions.map(s => s.id === subId ? sub : s));
+    return sub;
+  },
+  deleteSubscription: async (subId) => {
+    await fetch(`/api/audit/subscriptions/${subId}`, { method: 'DELETE' });
+    get().setRiskSubscriptions(get().riskSubscriptions.filter(s => s.id !== subId));
+  },
+  fetchSubscriptionDashboards: async () => {
+    try {
+      const res = await fetch('/api/audit/subscriptions/dashboard');
+      if (res.ok) {
+        const data = await res.json();
+        get().setSubscriptionDashboards(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch subscription dashboards:', e);
+    }
+  },
+  toggleSubscriptionEnabled: async (subId) => {
+    const sub = get().riskSubscriptions.find(s => s.id === subId);
+    if (!sub) return;
+    const updated = { ...sub, enabled: !sub.enabled };
+    const res = await fetch(`/api/audit/subscriptions/${subId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated)
+    });
+    const data = await res.json();
+    get().setRiskSubscriptions(get().riskSubscriptions.map(s => s.id === subId ? data : s));
   },
 }));

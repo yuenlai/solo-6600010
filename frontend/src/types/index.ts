@@ -424,3 +424,50 @@ export interface VersionMigrationAssessmentResult {
   code_diff_summary: string;
   assessed_at: string;
 }
+
+export interface RiskSubscription {
+  id: string;
+  name: string;
+  risk_pattern: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  description: string;
+  enabled: boolean;
+  notify_on_change: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RiskSubscriptionCreate {
+  name: string;
+  risk_pattern: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  description?: string;
+  enabled?: boolean;
+  notify_on_change?: boolean;
+}
+
+export interface SubscriptionMatch {
+  contract_name: string;
+  vulnerability_name: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  line: number;
+  description: string;
+  audited_at: string;
+  score: number;
+}
+
+export interface SubscriptionTrendDataPoint {
+  date: string;
+  match_count: number;
+  total_audited: number;
+  avg_score: number;
+}
+
+export interface SubscriptionDashboard {
+  subscription: RiskSubscription;
+  matches: SubscriptionMatch[];
+  total_matches: number;
+  trend: SubscriptionTrendDataPoint[];
+  trend_direction: "increasing" | "decreasing" | "stable";
+  latest_match_at: string | null;
+}

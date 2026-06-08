@@ -11,10 +11,11 @@ import { ProjectDashboard } from './components/ProjectDashboard';
 import { RemediationPlan } from './components/RemediationPlan';
 import { ContractFamilyAnalysis } from './components/ContractFamilyAnalysis';
 import { VersionMigrationAssessment } from './components/VersionMigrationAssessment';
+import { RuleSubscription } from './components/RuleSubscription';
 import { useAuditStore } from './store/audit';
 
 const App: React.FC = () => {
-  const { mode, setMode, setShowRuleManager, customRules, setShowHistory, setShowTemplateLibrary, setShowTaskList, auditTaskLists, setShowDashboard, setShowRemediationPlan, remediationPlans } = useAuditStore();
+  const { mode, setMode, setShowRuleManager, customRules, setShowHistory, setShowTemplateLibrary, setShowTaskList, auditTaskLists, setShowDashboard, setShowRemediationPlan, remediationPlans, riskSubscriptions, setShowRuleSubscription } = useAuditStore();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', background: '#2d2d2d', borderBottom: '1px solid #444', gap: '16px' }}>
@@ -54,6 +55,12 @@ const App: React.FC = () => {
           }}>
             自定义规则 {customRules.length > 0 && `(${customRules.length})`}
           </button>
+          <button onClick={() => setShowRuleSubscription(true)} style={{
+            padding: '6px 16px', border: '1px solid #666', borderRadius: '4px',
+            cursor: 'pointer', fontWeight: 500, background: 'transparent', color: '#ccc'
+          }}>
+            🔔 规则订阅 {riskSubscriptions.length > 0 && `(${riskSubscriptions.length})`}
+          </button>
           <button onClick={() => setShowDashboard(true)} style={{
             padding: '6px 16px', border: '1px solid #666', borderRadius: '4px',
             cursor: 'pointer', fontWeight: 500, background: 'transparent', color: '#ccc'
@@ -73,6 +80,7 @@ const App: React.FC = () => {
       <RemediationPlan />
       <ContractFamilyAnalysis />
       <VersionMigrationAssessment />
+      <RuleSubscription />
     </div>
   );
 };

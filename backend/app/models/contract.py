@@ -397,6 +397,48 @@ if _HAS_PYDANTIC:
         code_diff_summary: str
         assessed_at: str
 
+    class RiskSubscription(BaseModel):
+        id: str
+        name: str
+        risk_pattern: str
+        severity: Severity
+        description: str
+        enabled: bool = True
+        notify_on_change: bool = True
+        created_at: str
+        updated_at: str
+
+    class RiskSubscriptionCreate(BaseModel):
+        name: str
+        risk_pattern: str
+        severity: Severity = Severity.high
+        description: str = ""
+        enabled: bool = True
+        notify_on_change: bool = True
+
+    class SubscriptionMatch(BaseModel):
+        contract_name: str
+        vulnerability_name: str
+        severity: Severity
+        line: int
+        description: str
+        audited_at: str
+        score: float
+
+    class SubscriptionTrendDataPoint(BaseModel):
+        date: str
+        match_count: int
+        total_audited: int
+        avg_score: float
+
+    class SubscriptionDashboard(BaseModel):
+        subscription: RiskSubscription
+        matches: list[SubscriptionMatch]
+        total_matches: int
+        trend: list[SubscriptionTrendDataPoint]
+        trend_direction: str
+        latest_match_at: str | None = None
+
 else:
     class Vulnerability:
         pass
@@ -509,4 +551,14 @@ else:
     class VersionMigrationAssessmentRequest:
         pass
     class VersionMigrationAssessmentResult:
+        pass
+    class RiskSubscription:
+        pass
+    class RiskSubscriptionCreate:
+        pass
+    class SubscriptionMatch:
+        pass
+    class SubscriptionTrendDataPoint:
+        pass
+    class SubscriptionDashboard:
         pass

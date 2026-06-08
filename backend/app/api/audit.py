@@ -22,7 +22,8 @@ from ..models.contract import (
     ReportIssue, ReportConclusion, ReportRemediationItem, ReportRemediationSummary,
     AuditReport, AuditReportExportRequest,
     ContractFamilyAnalysisResult,
-    VersionMigrationAssessmentRequest, VersionMigrationAssessmentResult
+    VersionMigrationAssessmentRequest, VersionMigrationAssessmentResult,
+    RiskSubscription, RiskSubscriptionCreate, SubscriptionMatch, SubscriptionTrendDataPoint, SubscriptionDashboard
 )
 try:
     from ..services.analyzer import analyze_contract, analyze_batch, analyze_contract_family, assess_version_migration
@@ -31,7 +32,7 @@ except ImportError:
     analyze_batch = None
     analyze_contract_family = None
     assess_version_migration = None
-from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists, remediation_plans, audit_reports, migration_assessments
+from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists, remediation_plans, audit_reports, migration_assessments, risk_subscriptions
 
 class DummyRouter:
     def post(self, path):
@@ -1551,3 +1552,226 @@ async def get_migration_assessment(assessment_id: str) -> VersionMigrationAssess
 @router.get("/migration-assessments")
 async def list_migration_assessments() -> list[VersionMigrationAssessmentResult]:
     return sorted(migration_assessments.values(), key=lambda x: x.assessed_at, reverse=True)
+
+@router.get("/subscriptions")
+async def list_subscriptions() -> list[RiskSubscription]:
+    return sorted(risk_subscriptions.values(), key=lambda x: x.updated_at, reverse=True)
+
+@router.post("/subscriptions")
+async def create_subscription(req: RiskSubscriptionCreate) -> RiskSubscription:
+    sub_id = str(uuid.uuid4())[:8]
+    now = datetime.now().isoformat()
+    sub = RiskSubscription(
+        id=sub_id,
+        name=req.name,
+        risk_pattern=req.risk_pattern,
+        severity=req.severity,
+        description=req.description,
+        enabled=req.enabled,
+        notify_on_change=req.notify_on_change,
+        created_at=now,
+        updated_at=now
+    )
+    risk_subscriptions[sub_id] = sub
+    return sub
+
+@router.get("/subscriptions/{sub_id}")
+async def get_subscription(sub_id: str) -> RiskSubscription:
+    if sub_id not in risk_subscriptions:
+        raise HTTPException(404, "Subscription not found")
+    return risk_subscriptions[sub_id]
+
+@router.put("/subscriptions/{sub_id}")
+async def update_subscription(sub_id: str, req: RiskSubscriptionCreate) -> RiskSubscription:
+    if sub_id not in risk_subscriptions:
+        raise HTTPException(404, "Subscription not found")
+    existing = risk_subscriptions[sub_id]
+    updated = RiskSubscription(
+        id=sub_id,
+        name=req.name,
+        risk_pattern=req.risk_pattern,
+        severity=req.severity,
+        description=req.description,
+        enabled=req.enabled,
+        notify_on_change=req.notify_on_change,
+        created_at=existing.created_at,
+        updated_at=datetime.now().isoformat()
+    )
+    risk_subscriptions[sub_id] = updated
+    return updated
+
+@router.delete("/subscriptions/{sub_id}")
+async def delete_subscription(sub_id: str):
+    if sub_id not in risk_subscriptions:
+        raise HTTPException(404, "Subscription not found")
+    del risk_subscriptions[sub_id]
+    return {"message": "Subscription deleted"}
+
+@router.get("/subscriptions/{sub_id}/matches")
+async def get_subscription_matches(sub_id: str) -> list[SubscriptionMatch]:
+    if sub_id not in risk_subscriptions:
+        raise HTTPException(404, "Subscription not found")
+    sub = risk_subscriptions[sub_id]
+    matches = []
+    pattern_lower = sub.risk_pattern.lower()
+    for result in audit_results.values():
+        for vuln in result.vulnerabilities:
+            vuln_name_lower = vuln.name.lower()
+            vuln_desc_lower = vuln.description.lower()
+            if pattern_lower in vuln_name_lower or pattern_lower in vuln_desc_lower:
+                matches.append(SubscriptionMatch(
+                    contract_name=result.contract_name,
+                    vulnerability_name=vuln.name,
+                    severity=vuln.severity,
+                    line=vuln.line,
+                    description=vuln.description,
+                    audited_at=result.audited_at,
+                    score=result.score
+                ))
+    for batch_result in batch_audit_results.values():
+        for result in batch_result.results:
+            for vuln in result.vulnerabilities:
+                vuln_name_lower = vuln.name.lower()
+                vuln_desc_lower = vuln.description.lower()
+                if pattern_lower in vuln_name_lower or pattern_lower in vuln_desc_lower:
+                    existing = any(
+                        m.contract_name == result.contract_name and m.vulnerability_name == vuln.name and m.line == vuln.line
+                        for m in matches
+                    )
+                    if not existing:
+                        matches.append(SubscriptionMatch(
+                            contract_name=result.contract_name,
+                            vulnerability_name=vuln.name,
+                            severity=vuln.severity,
+                            line=vuln.line,
+                            description=vuln.description,
+                            audited_at=result.audited_at,
+                            score=result.score
+                        ))
+    matches.sort(key=lambda m: m.audited_at, reverse=True)
+    return matches
+
+@router.get("/subscriptions/{sub_id}/trend")
+async def get_subscription_trend(sub_id: str) -> list[SubscriptionTrendDataPoint]:
+    if sub_id not in risk_subscriptions:
+        raise HTTPException(404, "Subscription not found")
+    sub = risk_subscriptions[sub_id]
+    pattern_lower = sub.risk_pattern.lower()
+    date_data = {}
+    all_records = []
+    for contract_name, records in audit_history.items():
+        all_records.extend(records)
+    for record in all_records:
+        match_count = 0
+        for vuln in record.vulnerabilities:
+            vuln_name_lower = vuln.name.lower()
+            vuln_desc_lower = vuln.description.lower()
+            if pattern_lower in vuln_name_lower or pattern_lower in vuln_desc_lower:
+                match_count += 1
+        date_key = record.audited_at[:10]
+        if date_key not in date_data:
+            date_data[date_key] = {'match_count': 0, 'total_audited': 0, 'total_score': 0.0}
+        date_data[date_key]['match_count'] += match_count
+        date_data[date_key]['total_audited'] += 1
+        date_data[date_key]['total_score'] += record.score
+    trend = []
+    for date_key in sorted(date_data.keys()):
+        data = date_data[date_key]
+        avg_score = round(data['total_score'] / data['total_audited'], 2) if data['total_audited'] > 0 else 0
+        trend.append(SubscriptionTrendDataPoint(
+            date=date_key,
+            match_count=data['match_count'],
+            total_audited=data['total_audited'],
+            avg_score=avg_score
+        ))
+    return trend
+
+@router.get("/subscriptions/dashboard")
+async def get_subscriptions_dashboard() -> list[SubscriptionDashboard]:
+    dashboards = []
+    for sub in risk_subscriptions.values():
+        if not sub.enabled:
+            continue
+        pattern_lower = sub.risk_pattern.lower()
+        matches = []
+        for result in audit_results.values():
+            for vuln in result.vulnerabilities:
+                vuln_name_lower = vuln.name.lower()
+                vuln_desc_lower = vuln.description.lower()
+                if pattern_lower in vuln_name_lower or pattern_lower in vuln_desc_lower:
+                    matches.append(SubscriptionMatch(
+                        contract_name=result.contract_name,
+                        vulnerability_name=vuln.name,
+                        severity=vuln.severity,
+                        line=vuln.line,
+                        description=vuln.description,
+                        audited_at=result.audited_at,
+                        score=result.score
+                    ))
+        for batch_result in batch_audit_results.values():
+            for result in batch_result.results:
+                for vuln in result.vulnerabilities:
+                    vuln_name_lower = vuln.name.lower()
+                    vuln_desc_lower = vuln.description.lower()
+                    if pattern_lower in vuln_name_lower or pattern_lower in vuln_desc_lower:
+                        existing = any(
+                            m.contract_name == result.contract_name and m.vulnerability_name == vuln.name and m.line == vuln.line
+                            for m in matches
+                        )
+                        if not existing:
+                            matches.append(SubscriptionMatch(
+                                contract_name=result.contract_name,
+                                vulnerability_name=vuln.name,
+                                severity=vuln.severity,
+                                line=vuln.line,
+                                description=vuln.description,
+                                audited_at=result.audited_at,
+                                score=result.score
+                            ))
+        matches.sort(key=lambda m: m.audited_at, reverse=True)
+        date_data = {}
+        all_records = []
+        for contract_name, records in audit_history.items():
+            all_records.extend(records)
+        for record in all_records:
+            match_count = 0
+            for vuln in record.vulnerabilities:
+                vuln_name_lower = vuln.name.lower()
+                vuln_desc_lower = vuln.description.lower()
+                if pattern_lower in vuln_name_lower or pattern_lower in vuln_desc_lower:
+                    match_count += 1
+            date_key = record.audited_at[:10]
+            if date_key not in date_data:
+                date_data[date_key] = {'match_count': 0, 'total_audited': 0, 'total_score': 0.0}
+            date_data[date_key]['match_count'] += match_count
+            date_data[date_key]['total_audited'] += 1
+            date_data[date_key]['total_score'] += record.score
+        trend = []
+        for date_key in sorted(date_data.keys()):
+            data = date_data[date_key]
+            avg_score = round(data['total_score'] / data['total_audited'], 2) if data['total_audited'] > 0 else 0
+            trend.append(SubscriptionTrendDataPoint(
+                date=date_key,
+                match_count=data['match_count'],
+                total_audited=data['total_audited'],
+                avg_score=avg_score
+            ))
+        trend_direction = "stable"
+        if len(trend) >= 2:
+            recent = trend[-1].match_count
+            earlier = trend[0].match_count
+            if recent > earlier:
+                trend_direction = "increasing"
+            elif recent < earlier:
+                trend_direction = "decreasing"
+        latest_match_at = matches[0].audited_at if matches else None
+        dashboards.append(SubscriptionDashboard(
+            subscription=sub,
+            matches=matches[:20],
+            total_matches=len(matches),
+            trend=trend[-30:] if trend else [],
+            trend_direction=trend_direction,
+            latest_match_at=latest_match_at
+        ))
+    dashboards.sort(key=lambda d: d.subscription.updated_at, reverse=True)
+    return dashboards
