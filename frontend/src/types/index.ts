@@ -531,3 +531,37 @@ export interface AuditNoteCreate {
   author: string;
   content: string;
 }
+
+export interface RiskClusterVulnRef {
+  vulnerability_name: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  contract_name: string;
+  line: number;
+  description: string;
+}
+
+export interface RiskCluster {
+  cluster_id: string;
+  category: string;
+  category_label: string;
+  highest_severity: "critical" | "high" | "medium" | "low" | "info";
+  vulnerability_count: number;
+  affected_contracts: string[];
+  vulnerabilities: RiskClusterVulnRef[];
+  impact_scope: string;
+  fix_priority: string;
+  fix_effort: string;
+  unified_recommendation: string;
+}
+
+export interface RiskClusteringResult {
+  id: string;
+  clusters: RiskCluster[];
+  total_vulnerabilities: number;
+  total_clusters: number;
+  critical_clusters: number;
+  high_clusters: number;
+  clustering_summary: string;
+  overall_fix_strategy: string[];
+  analyzed_at: string;
+}

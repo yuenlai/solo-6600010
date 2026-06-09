@@ -25,15 +25,17 @@ from ..models.contract import (
     VersionMigrationAssessmentRequest, VersionMigrationAssessmentResult,
     RiskSubscription, RiskSubscriptionCreate, SubscriptionMatch, SubscriptionTrendDataPoint, SubscriptionDashboard,
     VulnDiffItem, ReReviewRequest, ReReviewResult,
-    AuditNoteRole, AuditNote, AuditNoteCreate
+    AuditNoteRole, AuditNote, AuditNoteCreate,
+    RiskClusteringResult
 )
 try:
-    from ..services.analyzer import analyze_contract, analyze_batch, analyze_contract_family, assess_version_migration
+    from ..services.analyzer import analyze_contract, analyze_batch, analyze_contract_family, assess_version_migration, cluster_risks
 except ImportError:
     analyze_contract = None
     analyze_batch = None
     analyze_contract_family = None
     assess_version_migration = None
+    cluster_risks = None
 from ..core.database import audit_results, batch_audit_results, custom_rules, audit_history, contract_version_counter, false_positive_feedbacks, audit_task_lists, remediation_plans, audit_reports, migration_assessments, risk_subscriptions, re_review_results, audit_notes
 
 class DummyRouter:
@@ -1536,6 +1538,12 @@ async def family_analysis(req: BatchAuditRequest) -> ContractFamilyAnalysisResul
     if not analyze_contract_family:
         raise HTTPException(500, "Family analysis not available")
     return analyze_contract_family(req.contracts)
+
+@router.post("/risk-clustering")
+async def risk_clustering(req: BatchAuditRequest) -> RiskClusteringResult:
+    if not cluster_risks:
+        raise HTTPException(500, "Risk clustering not available")
+    return cluster_risks(req.contracts)
 
 @router.post("/migration-assessment")
 async def migration_assessment(req: VersionMigrationAssessmentRequest) -> VersionMigrationAssessmentResult:

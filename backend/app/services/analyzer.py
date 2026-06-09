@@ -7,7 +7,8 @@ from ..models.contract import (
     ContractSimilarity, FamilyDuplicateRisk, FamilyDifferentialRisk,
     ContractFamily, ContractFamilyAnalysisResult,
     MigrationVulnChange, MigrationRiskItem, MigrationBenefitItem,
-    VersionMigrationAssessmentResult
+    VersionMigrationAssessmentResult,
+    RiskClusterVulnRef, RiskCluster, RiskClusteringResult
 )
 from ..core.database import custom_rules
 
@@ -729,4 +730,205 @@ def assess_version_migration(
         migration_score=round(migration_score, 1),
         code_diff_summary=code_diff_summary,
         assessed_at=datetime.now().isoformat()
+    )
+
+
+RISK_CATEGORIES = {
+    "fund_safety": {
+        "label": "资金安全",
+        "patterns": ["Reentrancy", "Unchecked Return", "Integer Overflow", "Selfdestruct"],
+        "impact_scope": "可能导致合约资金被盗取、锁定或异常增发，直接影响用户资产安全",
+        "fix_priority_map": {
+            "critical": "P0 - 立即修复",
+            "high": "P0 - 立即修复",
+            "medium": "P1 - 本周修复",
+            "low": "P2 - 下个版本修复",
+        },
+    },
+    "access_control": {
+        "label": "权限控制",
+        "patterns": ["tx.origin Auth", "Delegatecall", "Access Control"],
+        "impact_scope": "可能导致未授权用户绕过权限检查执行敏感操作，威胁合约治理安全",
+        "fix_priority_map": {
+            "critical": "P0 - 立即修复",
+            "high": "P1 - 本周修复",
+            "medium": "P1 - 本周修复",
+            "low": "P2 - 下个版本修复",
+        },
+    },
+    "external_call": {
+        "label": "外部调用安全",
+        "patterns": ["Unchecked Return", "Reentrancy", "External Call"],
+        "impact_scope": "外部调用处理不当可能导致交易失败被忽略、重入攻击或资金卡死",
+        "fix_priority_map": {
+            "critical": "P0 - 立即修复",
+            "high": "P0 - 立即修复",
+            "medium": "P1 - 本周修复",
+            "low": "P2 - 下个版本修复",
+        },
+    },
+    "logic_security": {
+        "label": "逻辑安全",
+        "patterns": ["Block Timestamp", "Integer Overflow", "Front-Running"],
+        "impact_scope": "合约关键业务逻辑可被矿工或攻击者操纵，导致不公平结果",
+        "fix_priority_map": {
+            "critical": "P0 - 立即修复",
+            "high": "P1 - 本周修复",
+            "medium": "P2 - 下个版本修复",
+            "low": "P3 - 逐步优化",
+        },
+    },
+    "code_quality": {
+        "label": "代码质量",
+        "patterns": ["Inline Assembly"],
+        "impact_scope": "代码可读性和可审计性降低，增加潜在隐患的隐藏风险",
+        "fix_priority_map": {
+            "critical": "P1 - 本周修复",
+            "high": "P2 - 下个版本修复",
+            "medium": "P3 - 逐步优化",
+            "low": "P3 - 逐步优化",
+        },
+    },
+}
+
+
+def _match_category(vuln_name: str) -> str | None:
+    for cat_key, cat_info in RISK_CATEGORIES.items():
+        if vuln_name in cat_info["patterns"]:
+            return cat_key
+    for cat_key, cat_info in RISK_CATEGORIES.items():
+        for pattern_keyword in cat_info["patterns"]:
+            if pattern_keyword.lower() in vuln_name.lower():
+                return cat_key
+    return "other"
+
+
+FIX_EFFORT_MAP = {
+    "critical": "高（需2-4周，含测试与审计）",
+    "high": "中高（需1-2周，含测试）",
+    "medium": "中（需3-5天）",
+    "low": "低（需1-2天）",
+    "info": "极低（需数小时）",
+}
+
+
+def cluster_risks(contracts: list[AuditRequest]) -> RiskClusteringResult:
+    results = [analyze_contract(c.source_code, c.contract_name) for c in contracts]
+
+    category_buckets: dict[str, list[RiskClusterVulnRef]] = defaultdict(list)
+    category_contracts: dict[str, set[str]] = defaultdict(set)
+    category_severity: dict[str, str] = {}
+
+    severity_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+
+    for r in results:
+        for v in r.vulnerabilities:
+            cat = _match_category(v.name)
+            sev_str = v.severity.value if hasattr(v.severity, "value") else str(v.severity)
+            ref = RiskClusterVulnRef(
+                vulnerability_name=v.name,
+                severity=Severity(sev_str),
+                contract_name=r.contract_name,
+                line=v.line,
+                description=v.description,
+            )
+            category_buckets[cat].append(ref)
+            category_contracts[cat].add(r.contract_name)
+            if cat not in category_severity or severity_rank.get(sev_str, 4) < severity_rank.get(category_severity[cat], 4):
+                category_severity[cat] = sev_str
+
+    clusters: list[RiskCluster] = []
+    for cat_key, refs in category_buckets.items():
+        cat_info = RISK_CATEGORIES.get(cat_key, None)
+        if cat_info:
+            label = cat_info["label"]
+            impact_scope = cat_info["impact_scope"]
+            fix_map = cat_info["fix_priority_map"]
+        else:
+            label = "其他风险"
+            impact_scope = "不属于上述类别的安全风险，仍需关注和处理"
+            fix_map = {"critical": "P0", "high": "P1", "medium": "P2", "low": "P3", "info": "P3"}
+
+        highest = category_severity.get(cat_key, "low")
+        fix_priority = fix_map.get(highest, "P2")
+        fix_effort = FIX_EFFORT_MAP.get(highest, "中（需3-5天）")
+
+        affected = sorted(category_contracts[cat_key])
+
+        sev_counts: dict[str, int] = defaultdict(int)
+        for ref in refs:
+            s = ref.severity.value if hasattr(ref.severity, "value") else str(ref.severity)
+            sev_counts[s] += 1
+
+        rec_parts = []
+        if cat_info:
+            if sev_counts.get("critical", 0) > 0:
+                rec_parts.append(f"【紧急】{label}类存在严重漏洞，须立即暂停相关功能并修复，避免资金损失")
+            if sev_counts.get("high", 0) > 0:
+                rec_parts.append(f"【高优】{label}类高危漏洞涉及{sev_counts['high']}处，建议统一制定修复方案并在本周内完成")
+            if sev_counts.get("medium", 0) > 0:
+                rec_parts.append(f"【中优】{label}类中危漏洞共{sev_counts['medium']}处，建议纳入下个迭代周期")
+            if sev_counts.get("low", 0) > 0 or sev_counts.get("info", 0) > 0:
+                rec_parts.append(f"【低优】{label}类低危问题可在后续版本中统一处理")
+        else:
+            rec_parts.append(f"其他风险共{len(refs)}处，建议逐项评估并安排修复")
+
+        unified_rec = "；".join(rec_parts) if rec_parts else "暂无修复建议"
+
+        clusters.append(RiskCluster(
+            cluster_id=str(uuid.uuid4())[:8],
+            category=cat_key,
+            category_label=label,
+            highest_severity=Severity(highest),
+            vulnerability_count=len(refs),
+            affected_contracts=affected,
+            vulnerabilities=refs,
+            impact_scope=impact_scope,
+            fix_priority=fix_priority,
+            fix_effort=fix_effort,
+            unified_recommendation=unified_rec,
+        ))
+
+    clusters.sort(key=lambda c: (
+        severity_rank.get(c.highest_severity.value if hasattr(c.highest_severity, "value") else str(c.highest_severity), 4),
+        -c.vulnerability_count,
+    ))
+
+    total_vulns = sum(len(refs) for refs in category_buckets.values())
+    crit_clusters = sum(1 for c in clusters if c.highest_severity in [Severity.critical])
+    high_clusters = sum(1 for c in clusters if c.highest_severity == Severity.high)
+
+    summary_parts = []
+    summary_parts.append(f"对 {len(contracts)} 份合约进行风险聚类分析，共识别出 {len(clusters)} 个风险类别，涉及 {total_vulns} 个漏洞。")
+    if crit_clusters > 0:
+        summary_parts.append(f"其中 {crit_clusters} 个类别存在严重级别漏洞，需立即处理。")
+    if high_clusters > 0:
+        summary_parts.append(f"{high_clusters} 个类别存在高危漏洞，建议本周内修复。")
+    if len(clusters) == 0:
+        summary_parts.append("未发现安全风险，整体安全状况良好。")
+    clustering_summary = "".join(summary_parts)
+
+    overall_fix_strategy = []
+    if crit_clusters > 0:
+        overall_fix_strategy.append("立即组建应急修复团队，优先处理所有严重级别风险类别的漏洞")
+        overall_fix_strategy.append("对严重级别风险涉及的合约进行暂停或限制操作，降低攻击面")
+    if high_clusters > 0:
+        overall_fix_strategy.append("本周内完成所有高危风险类别的漏洞修复与测试")
+    if total_vulns > 0:
+        overall_fix_strategy.append("制定分阶段修复计划，按 P0 > P1 > P2 > P3 优先级逐步推进")
+        overall_fix_strategy.append("修复完成后进行回归测试和二次审计，确保修复有效且未引入新问题")
+        overall_fix_strategy.append("建立统一安全编码规范，从源头减少同类风险再次出现")
+    if not overall_fix_strategy:
+        overall_fix_strategy.append("未发现安全风险，建议保持定期安全审计机制")
+
+    return RiskClusteringResult(
+        id=str(uuid.uuid4()),
+        clusters=clusters,
+        total_vulnerabilities=total_vulns,
+        total_clusters=len(clusters),
+        critical_clusters=crit_clusters,
+        high_clusters=high_clusters,
+        clustering_summary=clustering_summary,
+        overall_fix_strategy=overall_fix_strategy,
+        analyzed_at=datetime.now().isoformat(),
     )

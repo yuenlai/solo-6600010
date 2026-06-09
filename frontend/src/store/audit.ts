@@ -9,7 +9,7 @@ import {
   AuditReport, AuditReportExportRequest, ContractFamilyAnalysisResult,
   VersionMigrationAssessmentResult, RiskSubscription, RiskSubscriptionCreate,
   SubscriptionDashboard, ReReviewRequest, ReReviewResult,
-  AuditNote, AuditNoteCreate, AuditNoteRole
+  AuditNote, AuditNoteCreate, AuditNoteRole, RiskClusteringResult
 } from '../types';
 
 interface AuditState {
@@ -138,6 +138,13 @@ interface AuditState {
   createAuditNote: (data: AuditNoteCreate) => Promise<AuditNote>;
   updateAuditNote: (noteId: string, data: AuditNoteCreate) => Promise<AuditNote>;
   deleteAuditNote: (noteId: string) => Promise<void>;
+  riskClusteringResult: RiskClusteringResult | null;
+  setRiskClusteringResult: (result: RiskClusteringResult | null) => void;
+  isClusteringRisks: boolean;
+  setIsClusteringRisks: (value: boolean) => void;
+  showRiskClustering: boolean;
+  setShowRiskClustering: (show: boolean) => void;
+  runRiskClustering: () => Promise<void>;
 }
 
 const SAMPLE = `// SPDX-License-Identifier: MIT
@@ -227,6 +234,9 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   isSubmittingReReview: false,
   showAuditNotes: false,
   auditNotes: [],
+  riskClusteringResult: null,
+  isClusteringRisks: false,
+  showRiskClustering: false,
   setMode: (m) => set({ mode: m, result: null, batchResult: null }),
   setSourceCode: (code) => set({ sourceCode: code }),
   setResult: (r) => set({ result: r }),
@@ -670,5 +680,34 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   deleteAuditNote: async (noteId) => {
     await fetch(`/api/audit/notes/${noteId}`, { method: 'DELETE' });
     get().setAuditNotes(get().auditNotes.filter(n => n.id !== noteId));
+  },
+  setRiskClusteringResult: (result) => set({ riskClusteringResult: result }),
+  setIsClusteringRisks: (value) => set({ isClusteringRisks: value }),
+  setShowRiskClustering: (show) => set({ showRiskClustering: show }),
+  runRiskClustering: async () => {
+    const { batchContracts } = get();
+    const valid = batchContracts.filter(c => c.source_code.trim());
+    if (valid.length < 1) return;
+    set({ isClusteringRisks: true });
+    try {
+      const res = await fetch('/api/audit/risk-clustering', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contracts: valid.map(c => ({ source_code: c.source_code, contract_name: c.name || 'Contract' }))
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        set({ riskClusteringResult: data, showRiskClustering: true });
+      } else {
+        set({ riskClusteringResult: null });
+      }
+    } catch (e) {
+      console.error('Failed to run risk clustering:', e);
+      set({ riskClusteringResult: null });
+    } finally {
+      set({ isClusteringRisks: false });
+    }
   },
 }));

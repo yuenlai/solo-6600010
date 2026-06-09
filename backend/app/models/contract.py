@@ -502,6 +502,37 @@ if _HAS_PYDANTIC:
         author: str
         content: str
 
+    class RiskClusterVulnRef(BaseModel):
+        vulnerability_name: str
+        severity: Severity
+        contract_name: str
+        line: int
+        description: str
+
+    class RiskCluster(BaseModel):
+        cluster_id: str
+        category: str
+        category_label: str
+        highest_severity: Severity
+        vulnerability_count: int
+        affected_contracts: list[str]
+        vulnerabilities: list[RiskClusterVulnRef]
+        impact_scope: str
+        fix_priority: str
+        fix_effort: str
+        unified_recommendation: str
+
+    class RiskClusteringResult(BaseModel):
+        id: str
+        clusters: list[RiskCluster]
+        total_vulnerabilities: int
+        total_clusters: int
+        critical_clusters: int
+        high_clusters: int
+        clustering_summary: str
+        overall_fix_strategy: list[str]
+        analyzed_at: str
+
 else:
     class Vulnerability:
         pass
@@ -642,4 +673,10 @@ else:
     class AuditNote:
         pass
     class AuditNoteCreate:
+        pass
+    class RiskClusterVulnRef:
+        pass
+    class RiskCluster:
+        pass
+    class RiskClusteringResult:
         pass

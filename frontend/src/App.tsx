@@ -14,6 +14,7 @@ import { VersionMigrationAssessment } from './components/VersionMigrationAssessm
 import { RuleSubscription } from './components/RuleSubscription';
 import { ReReviewApplication } from './components/ReReviewApplication';
 import { AuditNotes } from './components/AuditNotes';
+import { RiskClusteringView } from './components/RiskClusteringView';
 import { useAuditStore } from './store/audit';
 
 const App: React.FC = () => {
@@ -97,6 +98,7 @@ const App: React.FC = () => {
       <RuleSubscription />
       <ReReviewApplication />
       <AuditNotes />
+      <RiskClusteringView />
     </div>
   );
 };

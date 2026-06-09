@@ -16,7 +16,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export const BatchAuditReport: React.FC = () => {
-  const { batchResult, submitFalsePositiveFeedback, falsePositiveFeedbacks, fetchFalsePositiveFeedbacks, createRemediationPlan, setShowRemediationPlan, setSelectedRemediationPlan, exportAuditReport, isExportingReport, runFamilyAnalysis, isAnalyzingFamily } = useAuditStore();
+  const { batchResult, submitFalsePositiveFeedback, falsePositiveFeedbacks, fetchFalsePositiveFeedbacks, createRemediationPlan, setShowRemediationPlan, setSelectedRemediationPlan, exportAuditReport, isExportingReport, runFamilyAnalysis, isAnalyzingFamily, runRiskClustering, isClusteringRisks } = useAuditStore();
   const [view, setView] = useState<'ranking' | 'common'>('ranking');
   const [selectedContract, setSelectedContract] = useState<AuditResult | null>(null);
   const [showFeedbackForm, setShowFeedbackForm] = useState<string | null>(null);
@@ -309,6 +309,23 @@ export const BatchAuditReport: React.FC = () => {
             }}
           >
             {isAnalyzingFamily ? '分析中...' : '🧬 家族分析'}
+          </button>
+          <button
+            onClick={runRiskClustering}
+            disabled={isClusteringRisks}
+            style={{
+              padding: '10px 16px',
+              border: 'none',
+              borderRadius: '6px',
+              background: '#e65100',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 500,
+              opacity: isClusteringRisks ? 0.6 : 1
+            }}
+          >
+            {isClusteringRisks ? '聚类中...' : '🎯 风险聚类'}
           </button>
           <button
             onClick={handleGenerateRemediationPlan}

@@ -3,7 +3,7 @@ import { useAuditStore } from '../store/audit';
 import axios from 'axios';
 
 export const BatchCodeInput: React.FC = () => {
-  const { batchContracts, addBatchContract, removeBatchContract, updateBatchContract, setBatchResult, setAnalyzing, isAnalyzing, setShowTemplateLibrary, runFamilyAnalysis, isAnalyzingFamily, runMigrationAssessment, isAssessingMigration } = useAuditStore();
+  const { batchContracts, addBatchContract, removeBatchContract, updateBatchContract, setBatchResult, setAnalyzing, isAnalyzing, setShowTemplateLibrary, runFamilyAnalysis, isAnalyzingFamily, runMigrationAssessment, isAssessingMigration, runRiskClustering, isClusteringRisks } = useAuditStore();
   const [activeTab, setActiveTab] = useState<string>(batchContracts[0]?.id || '');
   const [showMigrationPicker, setShowMigrationPicker] = useState(false);
   const [migrationOldIdx, setMigrationOldIdx] = useState(0);
@@ -40,6 +40,9 @@ export const BatchCodeInput: React.FC = () => {
         <button onClick={() => setShowTemplateLibrary(true)} style={{ padding: '4px 12px', borderRadius: '4px', border: '1px solid #555', background: 'transparent', color: '#ccc', cursor: 'pointer', fontSize: '12px' }}>📚 模板库</button>
         <button onClick={runFamilyAnalysis} disabled={isAnalyzingFamily || batchContracts.filter(c => c.source_code.trim()).length < 2} style={{ padding: '4px 12px', borderRadius: '4px', border: '1px solid #555', background: 'transparent', color: '#ccc', cursor: 'pointer', fontSize: '12px', opacity: (isAnalyzingFamily || batchContracts.filter(c => c.source_code.trim()).length < 2) ? 0.5 : 1 }}>
           {isAnalyzingFamily ? '分析中...' : '🧬 家族分析'}
+        </button>
+        <button onClick={runRiskClustering} disabled={isClusteringRisks || batchContracts.filter(c => c.source_code.trim()).length < 1} style={{ padding: '4px 12px', borderRadius: '4px', border: '1px solid #555', background: 'transparent', color: '#ccc', cursor: 'pointer', fontSize: '12px', opacity: (isClusteringRisks || batchContracts.filter(c => c.source_code.trim()).length < 1) ? 0.5 : 1 }}>
+          {isClusteringRisks ? '聚类中...' : '🎯 风险聚类'}
         </button>
         <button onClick={() => setShowMigrationPicker(!showMigrationPicker)} disabled={valid.length < 2} style={{ padding: '4px 12px', borderRadius: '4px', border: '1px solid #555', background: 'transparent', color: '#ccc', cursor: 'pointer', fontSize: '12px', opacity: (valid.length < 2 || isAssessingMigration) ? 0.5 : 1 }}>
           {isAssessingMigration ? '评估中...' : '🔄 迁移评估'}
